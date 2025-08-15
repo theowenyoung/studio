@@ -1,0 +1,14 @@
+[tools]
+python = "latest"
+zig = "latest"
+bun = "latest"
+
+
+[tasks.devhello]
+description = "通过 Bun 运行 hello world"
+run = "bun run --filter=bun-hello dev"
+raw = true
+
+[tasks.dockerhello]
+description = "打包 hello world 为 Docker 镜像"
+run = "docker build -f ./docker/bun/Dockerfile --platform linux/amd64 --target app -t bun-hello --build-arg APP=bun-hello ."

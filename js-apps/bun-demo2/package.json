@@ -1,0 +1,19 @@
+{
+  "name": "bun-demo2",
+  "module": "index.ts",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "autocannon": "^8.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch run src/index.ts"
+  },
+  "type": "module",
+  "dependencies": {
+    "tirne": "^0.1.13"
+  }
+}

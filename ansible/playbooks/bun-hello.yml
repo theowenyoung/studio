@@ -1,0 +1,4 @@
+- name: deploy bun-hello
+  hosts: all
+  become: true
+  tasks:

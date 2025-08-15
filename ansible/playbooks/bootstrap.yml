@@ -1,0 +1,11 @@
+- name: Bootstrap all hosts
+  hosts: all
+  become: true
+  vars:
+    ansible_user: root
+  collections:
+    - community.general
+    - ansible.posix
+  roles:
+    - common
+  tags: always
