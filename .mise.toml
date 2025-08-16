@@ -18,6 +18,10 @@ description = "通过 Bun 运行 dev 应用， mise dev bun-hello, mise dev app-
 run = "bun run --filter={{arg(name='filter')}} dev"
 raw = true
 
+[tasks.build]
+description = "通过 Bun 运行 build 应用， mise build bun-hello, mise build app-name"
+run = "bun run --filter={{arg(name='filter')}} build"
+
 
 [tasks.docker-build]
 description = "构建并标记 Docker 镜像用于 ECR 推送, mise docker-build app-name"
