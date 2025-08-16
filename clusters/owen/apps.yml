@@ -47,4 +47,3 @@ spec:
       APP_HOST: "demo-hello.owenyoung.com"
       APP_REPLICAS: "2"
       APP_NAMESPACE: "default"
-      APP_PORT: "80"
