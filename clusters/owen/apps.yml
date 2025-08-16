@@ -9,7 +9,7 @@ spec:
   interval: 5m0s
   sourceRef:
     kind: GitRepository
-    name: studio  # 这个名字需要和平台创建的 GitRepository 一致
+    name: flux-system  # 这个名字需要和平台创建的 GitRepository 一致
   path: ./k8s/base/web-app
   prune: true
   wait: true
