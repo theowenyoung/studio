@@ -19,11 +19,11 @@ spec:
       - name: app
         image: ${APP_IMAGE}:${APP_TAG}
         ports:
-        - containerPort: 3000
+        - containerPort: ${APP_PORT:-3000}  # 🆕 使用变量端口，默认 3000
           name: http
         env:
         - name: PORT
-          value: "3000"
+          value: "${APP_PORT:-3000}"
         - name: NODE_ENV
           value: "production"
         - name: APP_NAME

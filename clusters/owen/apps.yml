@@ -22,6 +22,7 @@ spec:
       APP_HOST: "bun-hello.owenyoung.com"
       APP_REPLICAS: "2"
       APP_NAMESPACE: "default"
+      APP_PORT: "3000"
 ---
 # 新的 hello-world 应用
 apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
@@ -41,8 +42,9 @@ spec:
   postBuild:
     substitute:
       APP_NAME: "hello-world"
-      APP_IMAGE: "nginx"                    # 使用公开的 nginx 镜像
+      APP_IMAGE: "912951144733.dkr.ecr.us-west-2.amazonaws.com/nginx-test"                    # 使用公开的 nginx 镜像
       APP_TAG: "latest"
       APP_HOST: "demo-hello.owenyoung.com"
       APP_REPLICAS: "2"
       APP_NAMESPACE: "default"
+      APP_PORT: "80"
