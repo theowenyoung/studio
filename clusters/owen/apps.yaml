@@ -1,0 +1,24 @@
+# bun-hello 应用
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+kind: Kustomization
+metadata:
+  name: bun-hello
+  namespace: flux-system
+spec:
+  interval: 5m0s
+  sourceRef:
+    kind: GitRepository
+    name: studio  # 这个名字需要和平台创建的 GitRepository 一致
+  path: ./k8s/base/web-app
+  prune: true
+  wait: true
+  timeout: 10m
+  postBuild:
+    substitute:
+      APP_NAME: "bun-hello"
+      APP_IMAGE: "912951144733.dkr.ecr.us-west-2.amazonaws.com/bun-hello"
+      APP_TAG: "20250817"
+      APP_HOST: "bun-hello.owenyoung.com"
+      APP_REPLICAS: "2"
+      APP_NAMESPACE: "default"

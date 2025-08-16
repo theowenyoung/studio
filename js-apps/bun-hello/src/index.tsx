@@ -27,6 +27,7 @@ const server = serve({
         message: `Hello, ${name}!`,
       });
     },
+    "/health": () => new Response("OK", { status: 200 }),
   },
 
   development: process.env.NODE_ENV !== "production" && {

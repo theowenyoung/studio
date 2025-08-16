@@ -1,4 +1,89 @@
-- name: deploy bun-hello
-  hosts: all
-  become: true
+---
+- name: Production Docker Deployment
+  hosts: production
+  become: yes
+  collections:
+    - community.aws
+    - community.docker
+  vars:
+    app_name: "bun-hello"
+    app_version: "{{ ansible_date_time.epoch }}"
+    aws_region: "us-west-2"
+    ecr_registry: "912951144733.dkr.ecr.us-west-2.amazonaws.com"
+    
+  pre_tasks:
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
   tasks:
+    - name: Get ECR login password
+      shell: aws ecr get-login-password --region {{ aws_region }}
+      register: ecr_password
+      delegate_to: localhost
+      run_once: true
+      become: no  # 添加这行，避免在本地执行时使用 sudo
+
+    - name: Docker login to ECR
+      community.docker.docker_login:
+        registry_url: "{{ ecr_registry }}"
+        username: "AWS"
+        password: "{{ ecr_password.stdout }}"
+      delegate_to: localhost
+      run_once: true
+      become: no  # 添加这行
+
+    - name: Stop old container
+      community.docker.docker_container:
+        name: "{{ app_name }}"
+        state: stopped
+      ignore_errors: yes
+
+    - name: Remove old container
+      community.docker.docker_container:
+        name: "{{ app_name }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Pull latest image
+      community.docker.docker_image:
+        name: "{{ ecr_registry }}/{{ app_name }}:latest"
+        source: pull
+        force_source: yes
+
+    - name: Start new container
+      community.docker.docker_container:
+        name: "{{ app_name }}"
+        image: "{{ ecr_registry }}/{{ app_name }}:latest"  # 修正变量名
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "80:3000"
+        env:
+          ENV: production
+          LOG_LEVEL: info
+        volumes:
+          - /opt/app/data:/app/data:rw
+          - /opt/app/logs:/app/logs:rw
+        healthcheck:
+          test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+          interval: 30s
+          timeout: 10s
+          retries: 3
+
+    - name: Wait for application to be ready
+      uri:
+        url: "http://{{ ansible_host }}:80/health"
+        method: GET
+        status_code: 200
+      retries: 10
+      delay: 5
+
+  post_tasks:
+    - name: Clean up old images
+      community.docker.docker_prune:
+        images: yes
+        images_filters:
+          dangling: false

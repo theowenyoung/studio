@@ -3,12 +3,68 @@ python = "latest"
 zig = "latest"
 bun = "latest"
 
+[env]
+# 自动获取 AWS 账号 ID，拼出 ECR registry
+ECR_REGISTRY = "912951144733.dkr.ecr.us-west-2.amazonaws.com"
 
-[tasks.devhello]
-description = "通过 Bun 运行 hello world"
-run = "bun run --filter=bun-hello dev"
+[tasks.setup]
+description = "设置开发环境"
+run = "pip install -r requirements-dev.txt"
+
+
+
+[tasks.dev]
+description = "通过 Bun 运行 dev 应用， mise dev bun-hello, mise dev app-name"
+run = "bun run --filter={{arg(name='filter')}} dev"
 raw = true
 
-[tasks.dockerhello]
-description = "打包 hello world 为 Docker 镜像"
-run = "docker build -f ./docker/bun/Dockerfile --platform linux/amd64 --target app -t bun-hello --build-arg APP=bun-hello ."
+
+[tasks.docker-build]
+description = "构建并标记 Docker 镜像用于 ECR 推送, mise docker-build app-name"
+run = """
+docker build -f ./docker/bun/Dockerfile --platform linux/amd64 --target app -t {{arg(name='app')}} --build-arg APP={{arg(name='app')}} .
+docker tag {{arg(name='app')}} $ECR_REGISTRY/{{arg(name='app')}}:{{arg(name='tag', default='latest')}}
+"""
+
+[tasks.docker-push]
+description = "推送 Docker 镜像到 ECR, mise docker-push app-name"
+depends = ["login-ecr"]
+run = "docker push $ECR_REGISTRY/{{arg(name='app')}}:{{arg(name='tag', default='latest')}}"
+
+[tasks.docker-deploy]
+description = "完整的构建和部署流程, mise docker-deploy app-name"
+run = """
+# 登录 ECR
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+# 构建镜像
+docker build -f ./docker/bun/Dockerfile --platform linux/amd64 --target app -t {{arg(name='app')}} --build-arg APP={{arg(name='app')}} .
+
+# 标记镜像
+docker tag {{arg(name='app')}} $ECR_REGISTRY/{{arg(name='app')}}:{{arg(name='tag', default='latest')}}
+
+# 推送镜像
+docker push $ECR_REGISTRY/{{arg(name='app')}}:{{arg(name='tag', default='latest')}}
+"""
+
+
+
+[tasks.install-ansible-deps]
+description = "安装 Ansible 依赖"
+run = [
+  "ansible-galaxy install -r ./ansible/requirements.yml --roles-path ~/.ansible/roles",
+  "ansible-galaxy collection install -r ./ansible/requirements.yml"
+]
+[tasks.create-ecr]
+description = "创建 ECR 仓库 mise create-ecr app-name"
+run = "aws ecr create-repository --repository-name {{arg(name='repo')}}"
+
+
+[tasks.login-ecr]
+description = "登录 ECR"
+run = "aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY"
+
+
+[tasks.deploy-hello]
+description = "部署 hello world"
+run = "ansible-playbook ansible/playbooks/bun-hello.yml -i ansible/inventory.ini"
