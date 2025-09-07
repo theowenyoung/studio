@@ -1,0 +1,14 @@
+---
+# 这是测试环境的模板，由脚本动态生成
+all:
+  children:
+    testing:
+      hosts:
+        test-{{ test_id }}:
+          ansible_host: {{ test_server_ip }}
+          ansible_user: root  # 测试环境可以用 root
+          ansible_port: 22
+          server_name: test-{{ test_id }}
+          environment: testing
+          test_id: "{{ test_id }}"
+          test_commit: "{{ test_commit }}"

@@ -1,0 +1,19 @@
+{
+  "name": "bun-demo6",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch run src/index.tsx"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "dependencies": {
+  }
+}

@@ -1,11 +1,36 @@
-- name: Bootstrap all hosts
+---
+- name: Bootstrap VPS
   hosts: all
-  become: true
-  vars:
-    ansible_user: root
-  collections:
-    - community.general
-    - ansible.posix
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Wait for system to be ready
+      include_tasks: ../tasks/common/wait-for-connection.yml
+  
   roles:
-    - common
-  tags: always
+    # 基础系统
+    - role: robertdebock.bootstrap
+      tags: [bootstrap]
+    
+    - role: robertdebock.update
+      tags: [update]
+      when: deploy_environment == "production"  # 测试环境跳过更新加快速度
+    
+    # 用户管理
+    - role: robertdebock.users
+      tags: [users]
+    
+    # 基础工具
+    - role: geerlingguy.git
+      tags: [git]
+    
+    - role: geerlingguy.pip
+      tags: [pip]
+    
+    - role: geerlingguy.docker
+      tags: [docker]
+  
+  post_tasks:
+    - name: Setup Docker networks
+      include_tasks: ../tasks/common/setup-docker-networks.yml
+      tags: [docker]

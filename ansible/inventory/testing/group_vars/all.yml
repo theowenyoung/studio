@@ -1,0 +1,52 @@
+---
+# =====================================
+# 测试环境配置（简化版）
+# =====================================
+deploy_environment: testing
+deploy_domain: "test-{{ test_id }}.dev.example.com"
+
+# 测试环境用的 SSH 密钥
+deploy_ssh_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINAPcRy9wGjP47bHpv2RcNO3yw3udCcTlgWs22KLcpUW main@example.com"
+
+# 用户（测试环境）
+users_user_list:
+  - name: deploy
+    groups: [sudo, docker]
+    sudo_options: "ALL=(ALL) NOPASSWD: ALL"
+    authorized_keys: "{{ deploy_ssh_keys }}"
+
+# SSH（测试环境可以更宽松）
+sshd:
+  PermitRootLogin: "yes"  # 方便初始化
+  PasswordAuthentication: "no"
+
+# 防火墙（测试环境）
+firewall_allowed_tcp_ports:
+  - "22"
+  - "80"
+  - "443"
+  - "3000"  # 直接访问应用端口
+
+# Docker
+docker_users:
+  - deploy
+
+# Caddy（测试环境简化配置）
+caddy_email: test@example.com
+caddy_config: |
+  :80 {
+    reverse_proxy app:3000
+    encode gzip
+  }
+
+# 应用配置（测试环境）
+app_name: "myapp-test-{{ test_id | default('default') }}"
+app_port: 3000
+app_directory: /app
+app_git_repo: "https://github.com/yourusername/yourapp.git"
+app_git_branch: "{{ test_commit | default('main') }}"
+
+# 测试环境特定
+test_auto_destroy: true
+test_ttl_hours: 24  # 24小时后自动销毁

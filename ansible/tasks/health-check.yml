@@ -1,0 +1,19 @@
+---
+- name: Wait for application to be ready
+  uri:
+    url: "http://localhost:{{ app_port }}/health"
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 30
+  delay: 5
+  ignore_errors: yes
+  tags: [health]
+
+- name: Report application status
+  debug:
+    msg: 
+      - "Application Status: {{ 'Healthy' if result.status == 200 else 'Unhealthy' }}"
+      - "URL: http://{{ ansible_host }}"
+      - "Environment: {{ deploy_environment }}"
+  tags: [health]

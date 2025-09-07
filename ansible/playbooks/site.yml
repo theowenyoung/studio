@@ -1,0 +1,22 @@
+---
+- name: Complete VPS Setup
+  hosts: all
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Include wait for connection
+      include_tasks: ../tasks/common/wait-for-connection.yml
+      tags: [always]
+  
+  tasks:
+    - name: Run bootstrap
+      import_playbook: bootstrap.yml
+      tags: [bootstrap]
+    
+    - name: Run security hardening
+      import_playbook: security.yml
+      tags: [security]
+    
+    - name: Deploy application
+      import_playbook: deploy-app.yml
+      tags: [deploy, app]

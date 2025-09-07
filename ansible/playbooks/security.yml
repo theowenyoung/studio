@@ -1,0 +1,20 @@
+---
+- name: Security Hardening
+  hosts: all
+  gather_facts: yes
+  
+  roles:
+    - role: willshersystems.sshd
+      tags: [ssh]
+    
+    - role: geerlingguy.security
+      tags: [security]
+      when: deploy_environment == "production"  # 测试环境简化安全设置
+    
+    - role: geerlingguy.firewall
+      tags: [firewall]
+  
+  post_tasks:
+    - name: Verify security services
+      include_tasks: ../tasks/security/verify-services.yml
+      tags: [verify]

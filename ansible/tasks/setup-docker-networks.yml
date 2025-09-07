@@ -1,0 +1,16 @@
+---
+- name: Ensure Docker is running
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Create Docker networks
+  community.docker.docker_network:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - web
+    - backend
+    - monitoring
+  tags: [docker-network]

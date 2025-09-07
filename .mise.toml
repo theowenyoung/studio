@@ -72,3 +72,15 @@ run = "aws ecr get-login-password --region us-west-2 | docker login --username A
 [tasks.deploy-hello]
 description = "部署 hello world"
 run = "ansible-playbook ansible/playbooks/bun-hello.yml -i ansible/inventory.ini"
+
+
+
+[tasks.bootstrapserver]
+description = "初始化一台服务器"
+run = "ansible-playbook ansible/playbooks/bootstrap.yml -i ansible/inventory.ini --ask-pass"
+
+[tasks.bootstrapserverwithoutpass]
+description = "初始化一台服务器, 无需密码"
+run = "ansible-playbook ansible/playbooks/bootstrap.yml -i ansible/inventory.ini"
+
+

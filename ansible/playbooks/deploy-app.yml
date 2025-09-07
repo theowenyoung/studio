@@ -1,0 +1,31 @@
+---
+- name: Deploy Application
+  hosts: all
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Create application directories
+      include_tasks: ../tasks/app/create-app-directories.yml
+      tags: [app-setup]
+  
+  roles:
+    - role: maxhoesel.caddy
+      tags: [caddy]
+  
+  tasks:
+    - name: Clone/Update application code
+      git:
+        repo: "{{ app_git_repo }}"
+        dest: "{{ app_directory }}"
+        version: "{{ app_git_branch }}"
+        force: yes
+      become_user: deploy
+      tags: [git, deploy]
+    
+    - name: Deploy with Docker Compose
+      include_tasks: ../tasks/app/deploy-docker-compose.yml
+      tags: [docker, deploy]
+    
+    - name: Run health check
+      include_tasks: ../tasks/app/health-check.yml
+      tags: [health-check]

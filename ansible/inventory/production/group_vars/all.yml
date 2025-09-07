@@ -1,0 +1,79 @@
+---
+# =====================================
+# 生产环境专用配置
+# =====================================
+deploy_environment: production
+deploy_domain: example.com
+
+# SSH 密钥（生产环境）
+deploy_ssh_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINAPcRy9wGjP47bHpv2RcNO3yw3udCcTlgWs22KLcpUW main@example.com"
+
+# 只覆盖必要的配置，其余使用默认值
+# =====================================
+# 用户配置（仅必要项）
+# =====================================
+users_user_list:
+  - name: deploy
+    groups: [sudo, docker]
+    sudo_options: "ALL=(ALL) NOPASSWD: ALL"
+    authorized_keys: "{{ deploy_ssh_keys }}"
+
+# =====================================
+# SSH 配置（仅关键安全项）
+# =====================================
+sshd:
+  PermitRootLogin: "no"
+  PasswordAuthentication: "no"
+
+# =====================================
+# 防火墙（基础端口）
+# =====================================
+firewall_allowed_tcp_ports:
+  - "22"    # SSH
+  - "80"    # HTTP
+  - "443"   # HTTPS
+
+firewall_allowed_udp_ports:
+  - "443"   # QUIC/HTTP3
+
+# =====================================
+# Docker
+# =====================================
+docker_users:
+  - deploy
+
+# =====================================
+# Caddy 配置（生产环境）
+# =====================================
+caddy_email: admin@{{ deploy_domain }}
+caddy_sites:
+  - domain: "{{ deploy_domain }}"
+    config: |
+      root * /app/public
+      file_server
+      encode gzip
+      
+      handle /api/* {
+        reverse_proxy app:3000
+      }
+
+caddy_config: |
+  {
+    email {{ caddy_email }}
+  }
+  
+  {% for site in caddy_sites %}
+  {{ site.domain }} {
+    {{ site.config | indent(4) }}
+  }
+  {% endfor %}
+
+# =====================================
+# 应用配置
+# =====================================
+app_name: myapp
+app_port: 3000
+app_directory: /app
+app_git_repo: "https://github.com/yourusername/yourapp.git"
+app_git_branch: main

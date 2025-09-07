@@ -1,0 +1,14 @@
+---
+- name: Create application directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: '0755'
+  loop:
+    - "{{ app_directory }}"
+    - "{{ app_directory }}/public"
+    - "{{ app_directory }}/data"
+    - /var/log/{{ app_name }}
+  tags: [directories]

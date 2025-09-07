@@ -1,18 +1,23 @@
+roles:
+  # 系统基础
+  - name: robertdebock.bootstrap
+  - name: robertdebock.update
+  
+  # 用户和安全
+  - name: robertdebock.users
+  - name: willshersystems.sshd
+  - name: geerlingguy.security
+  - name: geerlingguy.firewall
+  
+  # 应用依赖
+  - name: geerlingguy.docker
+  - name: geerlingguy.git
+  - name: geerlingguy.pip
+  
+  # Web 服务器
+  - name: maxhoesel.caddy
+
 collections:
   - name: community.general
-    version: ">=11.0.0,<12.0.0"
-  - name: ansible.posix
-    version: ">=2.0.0,<3.0.0"
-  - name: devsec.hardening
-    version: ">=10.0.0,<11.0.0"
   - name: community.docker
-    version: ">=4.0.0,<5.0.0"
-  - name: community.aws
-    version: ">=9.0.0,<10.0.0"
-
-
-roles:
-  - name: robertdebock.bootstrap
-    version: "7.1.2"
-  - name: geerlingguy.docker
-    version: "7.4.7"
+  - name: ansible.posix

@@ -1,0 +1,34 @@
+---
+- name: Destroy Test Environment
+  hosts: testing
+  gather_facts: no
+  
+  tasks:
+    - name: Confirm destruction
+      pause:
+        prompt: "Are you sure you want to destroy {{ inventory_hostname }}? (yes/no)"
+      register: confirm_destroy
+      when: test_auto_destroy is not defined or not test_auto_destroy
+    
+    - name: Stop all Docker containers
+      shell: docker stop $(docker ps -aq) || true
+      ignore_errors: yes
+      tags: [destroy]
+    
+    - name: Remove all Docker resources
+      shell: |
+        docker system prune -af --volumes
+        docker network prune -f
+      ignore_errors: yes
+      tags: [destroy]
+    
+    - name: Clean up application data
+      file:
+        path: "{{ app_directory }}"
+        state: absent
+      tags: [destroy]
+    
+    - name: Mark server for deletion
+      debug:
+        msg: "Server {{ inventory_hostname }} is ready for termination"
+      tags: [destroy]

@@ -1,0 +1,33 @@
+---
+- name: Generate docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ app_directory }}/docker-compose.yml"
+    owner: deploy
+    group: deploy
+    mode: '0644'
+  tags: [docker-compose]
+
+- name: Generate .env file
+  template:
+    src: env.j2
+    dest: "{{ app_directory }}/.env"
+    owner: deploy
+    group: deploy
+    mode: '0600'
+  tags: [docker-compose]
+
+- name: Pull Docker images
+  community.docker.docker_compose:
+    project_src: "{{ app_directory }}"
+    pull: yes
+  become_user: deploy
+  tags: [docker-pull]
+
+- name: Start application with Docker Compose
+  community.docker.docker_compose:
+    project_src: "{{ app_directory }}"
+    state: present
+    restarted: yes
+  become_user: deploy
+  tags: [docker-start]
