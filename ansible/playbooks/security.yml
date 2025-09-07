@@ -16,5 +16,5 @@
   
   post_tasks:
     - name: Verify security services
-      include_tasks: ../tasks/security/verify-services.yml
+      include_tasks: ../tasks/verify-services.yml
       tags: [verify]

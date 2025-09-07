@@ -5,7 +5,7 @@
   
   pre_tasks:
     - name: Create application directories
-      include_tasks: ../tasks/app/create-app-directories.yml
+      include_tasks: ../tasks/create-app-directories.yml
       tags: [app-setup]
   
   roles:
@@ -23,9 +23,9 @@
       tags: [git, deploy]
     
     - name: Deploy with Docker Compose
-      include_tasks: ../tasks/app/deploy-docker-compose.yml
+      include_tasks: ../tasks/deploy-docker-compose.yml
       tags: [docker, deploy]
     
     - name: Run health check
-      include_tasks: ../tasks/app/health-check.yml
+      include_tasks: ../tasks/health-check.yml
       tags: [health-check]

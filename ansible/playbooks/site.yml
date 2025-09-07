@@ -5,7 +5,7 @@
   
   pre_tasks:
     - name: Include wait for connection
-      include_tasks: ../tasks/common/wait-for-connection.yml
+      include_tasks: ../tasks/wait-for-connection.yml
       tags: [always]
   
   tasks:

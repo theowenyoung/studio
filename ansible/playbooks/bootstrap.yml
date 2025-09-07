@@ -5,7 +5,7 @@
   
   pre_tasks:
     - name: Wait for system to be ready
-      include_tasks: ../tasks/common/wait-for-connection.yml
+      include_tasks: ../tasks/wait-for-connection.yml
   
   roles:
     # 基础系统
@@ -32,5 +32,5 @@
   
   post_tasks:
     - name: Setup Docker networks
-      include_tasks: ../tasks/common/setup-docker-networks.yml
+      include_tasks: ../tasks/setup-docker-networks.yml
       tags: [docker]

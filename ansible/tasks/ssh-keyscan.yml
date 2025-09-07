@@ -1,0 +1,52 @@
+---
+# 添加已知主机到 SSH known_hosts，避免首次连接提示
+- name: Ensure .ssh directory exists
+  file:
+    path: ~/.ssh
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  run_once: true
+  tags: [ssh-keyscan]
+
+- name: Check if host is already in known_hosts
+  command: ssh-keygen -F {{ ansible_host }}
+  register: host_check
+  changed_when: false
+  failed_when: false
+  delegate_to: localhost
+  tags: [ssh-keyscan]
+
+- name: Scan SSH host keys
+  command: ssh-keyscan -t ed25519,rsa {{ ansible_host }}
+  register: ssh_keyscan
+  when: host_check.rc != 0
+  delegate_to: localhost
+  changed_when: false
+  tags: [ssh-keyscan]
+
+- name: Add host to known_hosts
+  lineinfile:
+    path: ~/.ssh/known_hosts
+    line: "{{ item }}"
+    create: yes
+    mode: '0644'
+  loop: "{{ ssh_keyscan.stdout_lines | default([]) }}"
+  when: 
+    - ssh_keyscan is defined
+    - ssh_keyscan.stdout_lines is defined
+  delegate_to: localhost
+  tags: [ssh-keyscan]
+
+- name: Verify SSH connectivity
+  command: ssh -o BatchMode=yes -o ConnectTimeout=5 {{ ansible_user }}@{{ ansible_host }} echo "SSH connection successful"
+  register: ssh_test
+  changed_when: false
+  delegate_to: localhost
+  ignore_errors: yes
+  tags: [ssh-keyscan, verify]
+
+- name: Report SSH connectivity status
+  debug:
+    msg: "{{ 'SSH connection verified successfully' if ssh_test.rc == 0 else 'SSH connection failed - please check credentials' }}"
+  tags: [ssh-keyscan, verify]

@@ -10,7 +10,5 @@
     name: "{{ item }}"
     state: present
   loop:
-    - web
-    - backend
-    - monitoring
+    - infra
   tags: [docker-network]
