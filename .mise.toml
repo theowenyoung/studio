@@ -4,8 +4,21 @@ zig = "latest"
 bun = "latest"
 
 [env]
+# 默认环境变量，可以被命令行覆盖
 # 自动获取 AWS 账号 ID，拼出 ECR registry
 ECR_REGISTRY = "912951144733.dkr.ecr.us-west-2.amazonaws.com"
+
+# ===============================================
+# 初始化任务 创建初始用户
+# ===============================================
+
+[tasks.pre]
+description = "初始化新服务器 - 创建 deploy 用户, 用法: mise run pre <server_ip> [user]"
+run = """
+echo "🚀 初始化服务器 {{arg(name="server_ip")}} (user={{arg(name="user", default="root")}})..."
+rsync -chazP ./scripts/create-init-user.sh {{arg(name="user", default="root")}}@{{arg(name="server_ip")}}:
+ssh {{arg(name="user", default="root")}}@{{arg(name="server_ip")}} 'bash create-init-user.sh'
+"""
 
 [tasks.setup]
 description = "设置开发环境"

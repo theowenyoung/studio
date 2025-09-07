@@ -9,7 +9,6 @@
     
     - role: geerlingguy.security
       tags: [security]
-      when: deploy_environment == "production"  # 测试环境简化安全设置
     
     - role: geerlingguy.firewall
       tags: [firewall]

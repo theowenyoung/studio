@@ -3,7 +3,8 @@
 # 生产环境专用配置
 # =====================================
 deploy_environment: production
-deploy_domain: example.com
+admin_email: owen@owenyoung.com
+app1_domain: demo-0907.owenyoung.com
 
 # SSH 密钥（生产环境）
 deploy_ssh_keys:
@@ -46,9 +47,9 @@ docker_users:
 # =====================================
 # Caddy 配置（生产环境）
 # =====================================
-caddy_email: admin@{{ deploy_domain }}
+caddy_email: {{ admin_email }}
 caddy_sites:
-  - domain: "{{ deploy_domain }}"
+  - domain: "{{ app1_domain }}"
     config: |
       root * /app/public
       file_server
@@ -74,6 +75,6 @@ caddy_config: |
 # =====================================
 app_name: myapp
 app_port: 3000
-app_directory: /app
-app_git_repo: "https://github.com/yourusername/yourapp.git"
+app_directory: js-apps/bun-demo6
+app_git_repo: "https://github.com/theowenyoung/studio"
 app_git_branch: main
