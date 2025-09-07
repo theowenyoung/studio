@@ -13,11 +13,9 @@ roles:
   - name: geerlingguy.docker
   - name: geerlingguy.git
   - name: geerlingguy.pip
-  
-  # Web 服务器
-  - name: maxhoesel.caddy
 
 collections:
   - name: community.general
   - name: community.docker
   - name: ansible.posix
+  - name: maxhoesel.caddy

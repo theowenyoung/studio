@@ -13,29 +13,33 @@
     fail_msg: "SSH service is not running properly"
     success_msg: "SSH service is running"
   tags: [verify, ssh]
-
-- name: Check firewall status
+- name: Check firewall status (firewalld)
   systemd:
-    name: ufw
+    name: firewalld
   register: firewall_service
-  when: ansible_os_family == "Debian"
   tags: [verify, firewall]
 
 - name: Verify firewall is active
-  command: ufw status
-  register: ufw_status
+  command: firewall-cmd --state
+  register: firewall_status
   changed_when: false
-  when: ansible_os_family == "Debian"
+  ignore_errors: yes
+  tags: [verify, firewall]
+
+- name: Get firewall zones and rules
+  command: firewall-cmd --list-all
+  register: firewall_rules
+  changed_when: false
+  when: firewall_status.rc == 0
   tags: [verify, firewall]
 
 - name: Display firewall status
   debug:
-    msg: "Firewall status: {{ ufw_status.stdout_lines[0] | default('Unknown') }}"
-  when: 
-    - ansible_os_family == "Debian"
-    - ufw_status is defined
+    msg: 
+      - "Firewall status: {{ firewall_status.stdout | default('Not running') }}"
+      - "{{ firewall_rules.stdout_lines | default([]) }}"
+  when: firewall_status is defined
   tags: [verify, firewall]
-
 - name: Check fail2ban service (production only)
   systemd:
     name: fail2ban

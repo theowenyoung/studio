@@ -94,6 +94,6 @@ run = "ansible-playbook ansible/playbooks/bootstrap.yml -i ansible/inventory.ini
 
 [tasks.bootstrapserverwithoutpass]
 description = "初始化一台服务器, 无需密码"
-run = "ansible-playbook ansible/playbooks/bootstrap.yml -i ansible/inventory.ini"
+run = "ansible-playbook ansible/playbooks/infra.yml"
 
 

@@ -6,7 +6,10 @@ A unified monorepo containing all my public projects, experiments, and deploymen
 
 
 ```
-# 先在 .ssh/config 里面添加你的服务器 ip 的快捷方式, like:
+# 先在服务器创建 deploy 用户
+mise pre 1.2.3.4
+
+# 在 .ssh/config 里面添加你的服务器 ip 的快捷方式, like:
 
 Host prodowen1
   HostName 1.2.3.4

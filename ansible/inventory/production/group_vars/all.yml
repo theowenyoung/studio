@@ -3,12 +3,19 @@
 # 生产环境专用配置
 # =====================================
 deploy_environment: production
-admin_email: owen@owenyoung.com
+admin_email: "owen@owenyoung.com"
 app1_domain: demo-0907.owenyoung.com
 
 # SSH 密钥（生产环境）
 deploy_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINAPcRy9wGjP47bHpv2RcNO3yw3udCcTlgWs22KLcpUW main@example.com"
+
+
+# 基础必装包
+common_packages:
+  - curl
+  - wget
+  - vim
 
 # 只覆盖必要的配置，其余使用默认值
 # =====================================
@@ -47,7 +54,7 @@ docker_users:
 # =====================================
 # Caddy 配置（生产环境）
 # =====================================
-caddy_email: {{ admin_email }}
+caddy_email: "{{ admin_email }}"
 caddy_sites:
   - domain: "{{ app1_domain }}"
     config: |

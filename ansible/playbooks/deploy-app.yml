@@ -9,7 +9,7 @@
       tags: [app-setup]
   
   roles:
-    - role: maxhoesel.caddy
+    - role: maxhoesel.caddy.caddy_server
       tags: [caddy]
   
   tasks:
