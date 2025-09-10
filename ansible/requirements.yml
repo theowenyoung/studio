@@ -16,8 +16,6 @@ roles:
     version: ">=3.0.0"
   - name: geerlingguy.pip
     version: ">=3.0.0"
-  - name: geerlingguy.postgresql
-    version: ">=4.0.0"  # 确保支持最新的Debian版本
   - name: geerlingguy.redis
     version: ">=1.9.0"
 
@@ -26,3 +24,4 @@ collections:
   - name: community.docker
   - name: ansible.posix
   - name: maxhoesel.caddy
+  - name: community.postgresql

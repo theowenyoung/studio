@@ -97,3 +97,8 @@ description = "初始化一台服务器, 无需密码"
 run = "ansible-playbook ansible/playbooks/infra.yml"
 
 
+[tasks.postgres]
+description = "部署 PostgreSQL"
+run = "ansible-playbook ansible/playbooks/deploy-database.yml"
+
+
