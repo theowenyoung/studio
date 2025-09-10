@@ -84,21 +84,6 @@
   become_user: deploy
   tags: [verify, docker]
 
-- name: Check Caddy service
-  systemd:
-    name: caddy
-  register: caddy_service
-  ignore_errors: yes
-  tags: [verify, caddy]
-
-- name: Verify Caddy is running
-  assert:
-    that:
-      - caddy_service.status.ActiveState == "active"
-    fail_msg: "Caddy service is not running"
-    success_msg: "Caddy service is running"
-  when: caddy_service is not failed
-  tags: [verify, caddy]
 
 - name: Verify critical ports are listening
   wait_for:
@@ -187,7 +172,6 @@
       - "SSH Service: {{ 'Running' if ssh_service.status.ActiveState == 'active' else 'Not Running' }}"
       - "Firewall: {{ 'Active' if 'Status: active' in (ufw_status.stdout | default('')) else 'Inactive' }}"
       - "Docker: {{ 'Running' if docker_service.status.ActiveState == 'active' else 'Not Running' }}"
-      - "Caddy: {{ 'Running' if caddy_service.status.ActiveState == 'active' else 'Not Running' if caddy_service is defined else 'Not Installed' }}"
       - "Fail2ban: {{ 'Running' if deploy_environment == 'production' and fail2ban_service is defined and fail2ban_service.status.ActiveState == 'active' else 'Not Required' if deploy_environment == 'testing' else 'Not Running' }}"
       - "Disk Usage: {{ disk_used_percent | default('Unknown') }}%"
       - "========================================="
@@ -205,7 +189,6 @@
       - SSH: {{ 'OK' if ssh_service.status.ActiveState == 'active' else 'FAIL' }}
       - Firewall: {{ 'OK' if 'Status: active' in (ufw_status.stdout | default('')) else 'FAIL' }}
       - Docker: {{ 'OK' if docker_service.status.ActiveState == 'active' else 'FAIL' }}
-      - Caddy: {{ 'OK' if caddy_service is defined and caddy_service.status.ActiveState == 'active' else 'N/A' }}
       - Fail2ban: {{ 'OK' if deploy_environment == 'production' and fail2ban_service is defined and fail2ban_service.status.ActiveState == 'active' else 'N/A' }}
       
       System Status:

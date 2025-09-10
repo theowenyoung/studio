@@ -14,7 +14,6 @@
     
     - role: robertdebock.update
       tags: [update]
-      when: deploy_environment == "production"  # 测试环境跳过更新加快速度
     
     # 用户管理
     - role: robertdebock.users
