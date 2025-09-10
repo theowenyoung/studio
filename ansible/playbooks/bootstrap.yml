@@ -30,6 +30,14 @@
       tags: [docker]
   
   post_tasks:
+    # 安装用户定义的基础包
+    - name: Install common packages
+      package:
+        name: "{{ common_packages }}"
+        state: present
+      when: common_packages is defined
+      tags: [packages, common]
+
     - name: Setup Docker networks
       include_tasks: ../tasks/setup-docker-networks.yml
       tags: [docker]

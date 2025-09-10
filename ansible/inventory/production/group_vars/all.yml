@@ -16,9 +16,9 @@ common_packages:
   - curl
   - wget
   - vim
-  - python3-systemd  # fail2ban 需要的 systemd Python 绑定
-  - iptables         # fail2ban 需要的防火墙工具
-  - ipset            # fail2ban 优化工具
+  - htop             # 系统监控工具
+  - tree             # 目录树显示工具
+  - unzip            # 解压工具
 
 # 只覆盖必要的配置，其余使用默认值
 # =====================================
