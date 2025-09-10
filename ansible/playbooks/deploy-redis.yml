@@ -1,0 +1,63 @@
+---
+- name: Deploy Redis Cache
+  hosts: all
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Update package cache
+      package:
+        update_cache: yes
+      tags: [redis, setup]
+
+  roles:
+    # Redis缓存服务
+    - role: geerlingguy.redis
+      tags: [redis, cache]
+  
+  tasks:
+    - name: Ensure Redis service is running
+      systemd:
+        name: redis
+        state: started
+        enabled: yes
+      tags: [redis, cache]
+
+    - name: Wait for Redis to be ready  
+      redis:
+        command: ping
+        login_host: localhost
+        login_port: "{{ redis_port | default('6379') }}"
+        login_password: "{{ redis_password | default(omit) }}"
+      register: redis_ready
+      retries: 10
+      delay: 3
+      until: redis_ready is success
+      tags: [redis, health-check]
+
+    - name: Test Redis connection
+      redis:
+        command: set
+        key: test_key
+        value: test_value
+        login_host: localhost
+        login_port: "{{ redis_port | default('6379') }}"
+        login_password: "{{ redis_password | default(omit) }}"
+      tags: [redis, test]
+
+    - name: Remove test key
+      redis:
+        command: del
+        key: test_key
+        login_host: localhost
+        login_port: "{{ redis_port | default('6379') }}"
+        login_password: "{{ redis_password | default(omit) }}"
+      tags: [redis, test]
+
+    - name: Display Redis connection info
+      debug:
+        msg:
+          - "Redis: 缓存服务运行正常 ✓"
+          - "Redis连接: redis://localhost:{{ redis_port | default('6379') }}"
+          - "最大内存: {{ redis_maxmemory | default('256mb') }}"
+          - "内存策略: {{ redis_maxmemory_policy | default('allkeys-lru') }}"
+      tags: [redis, info]

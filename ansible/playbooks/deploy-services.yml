@@ -1,0 +1,44 @@
+---
+# 独立服务部署 - 可以选择性部署不同的服务
+- name: Deploy Infrastructure Services
+  hosts: all
+  gather_facts: yes
+  
+  tasks:
+    - name: Display deployment options
+      debug:
+        msg:
+          - "开始部署基础服务..."
+          - "数据库部署: {{ deploy_database | default('true') }}"
+          - "Redis部署: {{ deploy_redis | default('true') }}"  
+          - "Caddy部署: {{ deploy_caddy | default('true') }}"
+          - "使用 --extra-vars 或在配置文件中设置 deploy_* 变量来控制部署"
+      tags: [info]
+    
+    # PostgreSQL 数据库服务
+    - name: Deploy PostgreSQL Database
+      include: deploy-database.yml
+      when: deploy_database | default(true) | bool
+      tags: [postgresql, database, services]
+    
+    # Redis 缓存服务
+    - name: Deploy Redis Cache
+      include: deploy-redis.yml
+      when: deploy_redis | default(true) | bool
+      tags: [redis, cache, services]
+    
+    # Caddy 反向代理服务
+    - name: Deploy Caddy Proxy
+      include: deploy-caddy.yml
+      when: deploy_caddy | default(true) | bool
+      tags: [caddy, proxy, services]
+
+    - name: Display deployment summary
+      debug:
+        msg:
+          - "服务部署完成！"
+          - "已部署的服务:"
+          - "  - PostgreSQL: {{ 'Yes' if (deploy_database | default(true) | bool) else 'Skipped' }}"
+          - "  - Redis: {{ 'Yes' if (deploy_redis | default(true) | bool) else 'Skipped' }}"
+          - "  - Caddy: {{ 'Yes' if (deploy_caddy | default(true) | bool) else 'Skipped' }}"
+      tags: [info, summary]

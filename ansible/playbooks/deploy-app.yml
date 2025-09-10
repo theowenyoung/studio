@@ -8,19 +8,23 @@
       include_tasks: ../tasks/create-app-directories.yml
       tags: [app-setup]
   
-  roles:
-    # 数据库服务
-    - role: geerlingguy.postgresql
-      tags: [postgresql, database]
-    
-    - role: geerlingguy.redis
-      tags: [redis, cache]
-    
-    # Caddy反向代理
-    - role: maxhoesel.caddy.caddy_server
-      tags: [caddy, proxy]
-  
   tasks:
+    # 可选择性部署服务 - 使用独立的playbooks
+    - name: Deploy PostgreSQL Database
+      include: deploy-database.yml
+      when: deploy_database | default(true)
+      tags: [postgresql, database, services]
+    
+    - name: Deploy Redis Cache
+      include: deploy-redis.yml
+      when: deploy_redis | default(true)
+      tags: [redis, cache, services]
+    
+    - name: Deploy Caddy Proxy
+      include: deploy-caddy.yml
+      when: deploy_caddy | default(true)
+      tags: [caddy, proxy, services]
+    
     - name: Clone/Update application code
       git:
         repo: "{{ app_git_repo }}"
@@ -33,10 +37,6 @@
     - name: Deploy Web Application
       include_tasks: ../tasks/deploy-webapp.yml
       tags: [docker, deploy]
-    
-    - name: Manage databases
-      include_tasks: ../tasks/manage-databases.yml
-      tags: [database, deploy]
     
     - name: Run health check
       include_tasks: ../tasks/health-check.yml

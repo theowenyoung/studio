@@ -1,0 +1,85 @@
+---
+- name: Deploy PostgreSQL Database
+  hosts: all
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Update package cache
+      package:
+        update_cache: yes
+      tags: [database, setup]
+
+  roles:
+    # PostgreSQL数据库服务
+    - role: geerlingguy.postgresql
+      tags: [postgresql, database]
+  
+  tasks:
+    - name: Ensure PostgreSQL service is running
+      systemd:
+        name: "{{ postgresql_daemon }}"
+        state: started
+        enabled: yes
+      tags: [database, postgresql]
+
+    - name: Wait for PostgreSQL service to be ready
+      postgresql_ping:
+        db: "postgres"
+        login_user: "postgres"  
+        login_host: "localhost"
+      register: postgres_service_ready
+      retries: 10
+      delay: 3
+      until: postgres_service_ready is success
+      tags: [database, health-check]
+
+    - name: Test each application database connection
+      postgresql_ping:
+        db: "{{ item.services.postgresql.database }}"
+        login_user: "{{ item.services.postgresql.user }}"
+        login_password: "{{ item.services.postgresql.password }}"
+        login_host: "localhost"
+      register: app_db_ready
+      retries: 5
+      delay: 2
+      until: app_db_ready is success
+      loop: "{{ applications }}"
+      when: item.services.postgresql.enabled | default(false)
+      tags: [database, health-check]
+
+    - name: Create database backup directory for each application
+      file:
+        path: "/opt/{{ item.name }}/backups"
+        state: directory
+        owner: deploy
+        group: deploy
+        mode: '0755'
+      loop: "{{ applications }}"
+      when: item.services.postgresql.enabled | default(false)
+      tags: [database, backup]
+
+    - name: Create PostgreSQL backup script for each application
+      template:
+        src: pg_backup.sh.j2
+        dest: "/opt/{{ item.name }}/backups/pg_backup.sh"
+        owner: deploy
+        group: deploy
+        mode: '0755'
+      vars:
+        app_name: "{{ item.name }}"
+        postgres_db: "{{ item.services.postgresql.database }}"
+        postgres_user: "{{ item.services.postgresql.user }}"
+        postgres_password: "{{ item.services.postgresql.password }}"
+      loop: "{{ applications }}"
+      when: item.services.postgresql.enabled | default(false)
+      tags: [database, backup]
+
+    - name: Display PostgreSQL connection info
+      debug:
+        msg:
+          - "PostgreSQL: 数据库服务运行正常 ✓"
+          - "已配置的应用数据库:"
+          - "{% for app in applications %}{% if app.services.postgresql.enabled %}  - {{ app.name }}: postgresql://{{ app.services.postgresql.user }}:***@localhost:5432/{{ app.services.postgresql.database }}{% endif %}{% endfor %}"
+          - "备份脚本位置:"
+          - "{% for app in applications %}{% if app.services.postgresql.enabled %}  - {{ app.name }}: /opt/{{ app.name }}/backups/pg_backup.sh{% endif %}{% endfor %}"
+      tags: [database, info]

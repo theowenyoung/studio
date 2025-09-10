@@ -211,14 +211,3 @@ redis_save:
 redis_appendonly: "yes"
 redis_appendfsync: "everysec"
 
-# =====================================
-# 兼容性配置（为了向后兼容现有playbooks）
-# =====================================
-# 从第一个应用获取默认值，用于向后兼容
-app_name: "{{ applications[0].name }}"
-app_port: "{{ applications[0].port }}"
-app_directory: "{{ applications[0].directory }}"
-app_git_repo: "{{ applications[0].git_repo }}"
-app_git_branch: "{{ applications[0].git_branch }}"
-app_secret_key: "{{ applications[0].env.SECRET_KEY }}"
-log_level: "{{ applications[0].env.LOG_LEVEL }}"
