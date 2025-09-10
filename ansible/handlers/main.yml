@@ -1,0 +1,32 @@
+---
+# Ansible handlers
+
+- name: restart webapp service
+  systemd:
+    name: "{{ app_name }}.service"
+    state: restarted
+    daemon_reload: yes
+  listen: "restart webapp service"
+
+- name: reload systemd
+  systemd:
+    daemon_reload: yes
+  listen: "reload systemd"
+
+- name: restart caddy
+  systemd:
+    name: caddy
+    state: restarted
+  listen: "restart caddy"
+
+- name: restart postgresql
+  systemd:
+    name: "{{ postgresql_daemon }}"
+    state: restarted
+  listen: "restart postgresql"
+
+- name: restart redis
+  systemd:
+    name: redis
+    state: restarted
+  listen: "restart redis"

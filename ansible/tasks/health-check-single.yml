@@ -1,0 +1,20 @@
+---
+- name: Wait for {{ current_app.name }} service to be ready
+  uri:
+    url: "http://localhost:{{ current_app.port }}"
+    method: GET
+    status_code: [200, 301, 302, 404]  # 允许多种状态码，应用可能还没完全配置路由
+  register: app_health_check
+  retries: 10
+  delay: 3
+  until: app_health_check is success
+  tags: [health-check]
+
+- name: Display health check result for {{ current_app.name }}
+  debug:
+    msg:
+      - "应用 {{ current_app.name }} 健康检查: ✓"
+      - "状态码: {{ app_health_check.status }}"
+      - "访问地址: https://{{ current_app.domain }}"
+      - "本地测试: curl http://localhost:{{ current_app.port }}"
+  tags: [health-check]

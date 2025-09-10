@@ -9,8 +9,16 @@
       tags: [app-setup]
   
   roles:
+    # 数据库服务
+    - role: geerlingguy.postgresql
+      tags: [postgresql, database]
+    
+    - role: geerlingguy.redis
+      tags: [redis, cache]
+    
+    # Caddy反向代理
     - role: maxhoesel.caddy.caddy_server
-      tags: [caddy]
+      tags: [caddy, proxy]
   
   tasks:
     - name: Clone/Update application code
@@ -22,9 +30,13 @@
       become_user: deploy
       tags: [git, deploy]
     
-    - name: Deploy with Docker Compose
-      include_tasks: ../tasks/deploy-docker-compose.yml
+    - name: Deploy Web Application
+      include_tasks: ../tasks/deploy-webapp.yml
       tags: [docker, deploy]
+    
+    - name: Manage databases
+      include_tasks: ../tasks/manage-databases.yml
+      tags: [database, deploy]
     
     - name: Run health check
       include_tasks: ../tasks/health-check.yml

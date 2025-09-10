@@ -1,0 +1,55 @@
+---
+- name: Deploy Single Application
+  hosts: all
+  gather_facts: yes
+  vars:
+    target_app_name: "{{ app_name | default('') }}"
+  
+  pre_tasks:
+    - name: Validate target app
+      fail:
+        msg: "请指定要部署的应用: -e app_name=myapp"
+      when: target_app_name == ''
+    
+    - name: Find target application config
+      set_fact:
+        target_app: "{{ applications | selectattr('name', 'equalto', target_app_name) | first }}"
+      when: target_app_name != ''
+
+    - name: Display deployment info
+      debug:
+        msg:
+          - "准备部署应用: {{ target_app.name }}"
+          - "端口: {{ target_app.port }}"
+          - "目录: {{ target_app.directory }}"
+          - "域名: {{ target_app.domain }}"
+          - "PostgreSQL: {{ target_app.services.postgresql.enabled }}"
+          - "Redis: {{ target_app.services.redis.enabled }}"
+    
+    - name: Create application directories
+      include_tasks: ../tasks/create-app-directories.yml
+      vars:
+        app_directory: "{{ target_app.directory }}"
+      tags: [app-setup]
+  
+  tasks:
+    - name: Clone/Update specific application code
+      git:
+        repo: "{{ target_app.git_repo }}"
+        dest: "{{ target_app.directory }}"
+        version: "{{ target_app.git_branch }}"
+        force: yes
+      become_user: deploy
+      tags: [git, deploy]
+    
+    - name: Deploy specific web application
+      include_tasks: ../tasks/deploy-single-webapp.yml
+      vars:
+        current_app: "{{ target_app }}"
+      tags: [docker, deploy]
+    
+    - name: Health check for specific app
+      include_tasks: ../tasks/health-check-single.yml
+      vars:
+        current_app: "{{ target_app }}"
+      tags: [health-check]

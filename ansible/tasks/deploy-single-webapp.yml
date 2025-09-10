@@ -1,0 +1,67 @@
+---
+- name: Generate .env file for {{ current_app.name }}
+  template:
+    src: env.j2
+    dest: "{{ current_app.directory }}/.env"
+    owner: deploy
+    group: deploy
+    mode: '0600'
+  vars:
+    app_env: "{{ current_app.env }}"
+    app_name: "{{ current_app.name }}"
+    app_services: "{{ current_app.services }}"
+  tags: [docker, app-config]
+
+- name: Create uploads directory for {{ current_app.name }}
+  file:
+    path: "{{ current_app.directory }}/uploads"
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: '0755'
+  tags: [docker, app-setup]
+
+- name: Build Docker image for {{ current_app.name }}
+  community.docker.docker_image:
+    name: "{{ current_app.name }}:{{ current_app.git_branch | default('latest') }}"
+    build:
+      path: "{{ current_app.directory }}"
+      dockerfile: Dockerfile
+    source: build
+    force_source: yes
+  become_user: deploy
+  tags: [docker-build]
+
+- name: Create systemd service file for {{ current_app.name }}
+  template:
+    src: webapp.service.j2
+    dest: "/etc/systemd/system/{{ current_app.name }}.service"
+    owner: root
+    group: root
+    mode: '0644'
+  vars:
+    app_name: "{{ current_app.name }}"
+    app_directory: "{{ current_app.directory }}"
+    app_port: "{{ current_app.port }}"
+  notify: "restart {{ current_app.name }} service"
+  tags: [docker, systemd]
+
+- name: Reload systemd daemon
+  systemd:
+    daemon_reload: yes
+  tags: [docker, systemd]
+
+- name: Enable and start {{ current_app.name }} service
+  systemd:
+    name: "{{ current_app.name }}.service"
+    enabled: yes
+    state: started
+  tags: [docker, systemd]
+
+- name: Display service status
+  debug:
+    msg:
+      - "服务 {{ current_app.name }} 已启动"
+      - "端口: {{ current_app.port }}"
+      - "域名: {{ current_app.domain }}"
+      - "检查服务: sudo systemctl status {{ current_app.name }}"

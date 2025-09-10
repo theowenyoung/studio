@@ -5,10 +5,5 @@
     state: started
     enabled: yes
 
-- name: Create Docker networks
-  community.docker.docker_network:
-    name: "{{ item }}"
-    state: present
-  loop:
-    - infra
-  tags: [docker-network]
+# 注意：使用host网络模式，不需要创建自定义Docker网络
+# Web应用直接连接本地的PostgreSQL、Redis和Caddy服务

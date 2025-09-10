@@ -1,0 +1,41 @@
+#!/bin/bash
+# PostgreSQL备份脚本
+# 生成时间: {{ ansible_date_time.iso8601 }}
+
+set -euo pipefail
+
+# 配置变量
+DB_NAME="{{ postgres_db }}"
+DB_USER="{{ postgres_user }}"
+BACKUP_DIR="{{ app_directory }}/backups"
+DATE=$(date +"%Y%m%d_%H%M%S")
+BACKUP_FILE="${BACKUP_DIR}/pg_backup_${DB_NAME}_${DATE}.sql"
+
+# 创建备份目录
+mkdir -p "${BACKUP_DIR}"
+
+# 执行备份
+echo "开始备份数据库: ${DB_NAME}"
+PGPASSWORD="{{ postgres_password }}" pg_dump \
+    -h localhost \
+    -U "${DB_USER}" \
+    -d "${DB_NAME}" \
+    --verbose \
+    --clean \
+    --if-exists \
+    --create \
+    --format=plain \
+    > "${BACKUP_FILE}"
+
+# 压缩备份文件
+gzip "${BACKUP_FILE}"
+COMPRESSED_FILE="${BACKUP_FILE}.gz"
+
+echo "备份完成: ${COMPRESSED_FILE}"
+
+# 清理7天前的备份
+find "${BACKUP_DIR}" -name "pg_backup_*.sql.gz" -mtime +7 -delete
+echo "已清理7天前的备份文件"
+
+# 显示备份文件信息
+ls -lh "${COMPRESSED_FILE}"

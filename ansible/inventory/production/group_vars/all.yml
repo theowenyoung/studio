@@ -4,7 +4,7 @@
 # =====================================
 deploy_environment: production
 admin_email: "owen@owenyoung.com"
-app1_domain: demo-0907.owenyoung.com
+base_domain: "owenyoung.com"
 
 # SSH 密钥（生产环境）
 deploy_ssh_keys:
@@ -61,19 +61,77 @@ docker_users:
   - deploy
 
 # =====================================
-# Caddy 配置（生产环境）
+# 多应用配置
+# =====================================
+applications:
+  # 需要PostgreSQL的应用
+  - name: myapp
+    port: 3000
+    directory: js-apps/bun-demo6
+    git_repo: "https://github.com/theowenyoung/studio"
+    git_branch: main
+    domain: "demo-0907.{{ base_domain }}"
+    services:
+      postgresql:
+        enabled: true
+        database: "myapp_prod"
+        user: "myapp_user"
+        password: "{{ vault_myapp_db_password | default('change-me-in-production') }}"
+      redis:
+        enabled: true
+    env:
+      SECRET_KEY: "{{ vault_myapp_secret_key | default('change-me-in-production') }}"
+      LOG_LEVEL: info
+
+  # 示例：只需要Redis的应用（注释掉，需要时取消注释）
+  # - name: cache-service
+  #   port: 3001
+  #   directory: js-apps/cache-service
+  #   git_repo: "https://github.com/theowenyoung/studio"
+  #   git_branch: main
+  #   domain: "cache.{{ base_domain }}"
+  #   services:
+  #     postgresql:
+  #       enabled: false
+  #     redis:
+  #       enabled: true
+  #   env:
+  #     LOG_LEVEL: debug
+
+  # 示例：纯静态站点（注释掉，需要时取消注释）
+  # - name: static-site
+  #   port: 3002
+  #   directory: js-apps/static-site
+  #   git_repo: "https://github.com/theowenyoung/studio"
+  #   git_branch: main
+  #   domain: "static.{{ base_domain }}"
+  #   services:
+  #     postgresql:
+  #       enabled: false
+  #     redis:
+  #       enabled: false
+  #   env:
+  #     NODE_ENV: production
+
+# =====================================
+# Caddy 配置（动态生成）
 # =====================================
 caddy_email: "{{ admin_email }}"
-caddy_sites:
-  - domain: "{{ app1_domain }}"
-    config: |
-      root * /app/public
-      file_server
-      encode gzip
-      
-      handle /api/* {
-        reverse_proxy app:3000
-      }
+
+# 为每个应用自动生成Caddy站点配置
+caddy_sites: |
+  {%- set sites = [] -%}
+  {%- for app in applications -%}
+    {%- set site_config = "reverse_proxy localhost:" + app.port|string -%}
+    {%- if app.directory == 'js-apps/static-site' -%}
+      {%- set site_config = "root * /app/public\nfile_server\nencode gzip" -%}
+    {%- endif -%}
+    {%- set _ = sites.append({
+        'domain': app.domain,
+        'config': site_config
+    }) -%}
+  {%- endfor -%}
+  {{ sites }}
 
 caddy_config: |
   {
@@ -87,10 +145,80 @@ caddy_config: |
   {% endfor %}
 
 # =====================================
-# 应用配置
+# PostgreSQL 配置 (geerlingguy.postgresql)
 # =====================================
-app_name: myapp
-app_port: 3000
-app_directory: js-apps/bun-demo6
-app_git_repo: "https://github.com/theowenyoung/studio"
-app_git_branch: main
+
+# PostgreSQL role 配置
+postgresql_version: "15"
+postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/main"
+postgresql_bin_path: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
+postgresql_config_path: "/etc/postgresql/{{ postgresql_version }}/main"
+postgresql_daemon: "postgresql"
+postgresql_packages:
+  - postgresql-{{ postgresql_version }}
+  - postgresql-contrib-{{ postgresql_version }}
+  - libpq-dev
+
+# 动态生成PostgreSQL数据库配置（只为需要PostgreSQL的应用）
+postgresql_databases: |
+  {%- set dbs = [] -%}
+  {%- for app in applications -%}
+    {%- if app.services.postgresql.enabled -%}
+      {%- set _ = dbs.append({
+          'name': app.services.postgresql.database,
+          'owner': app.services.postgresql.user
+      }) -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {{ dbs }}
+
+# 动态生成PostgreSQL用户配置（只为需要PostgreSQL的应用）
+postgresql_users: |
+  {%- set users = [] -%}
+  {%- for app in applications -%}
+    {%- if app.services.postgresql.enabled -%}
+      {%- set _ = users.append({
+          'name': app.services.postgresql.user,
+          'password': app.services.postgresql.password,
+          'priv': app.services.postgresql.database + ':ALL'
+      }) -%}
+    {%- endif -%}
+  {%- endfor -%}
+  {{ users }}
+
+# PostgreSQL 连接配置
+postgresql_hba_entries:
+  - {type: local, database: all, user: postgres, auth_method: peer}
+  - {type: local, database: all, user: all, auth_method: peer}
+  - {type: host, database: all, user: all, address: '127.0.0.1/32', auth_method: md5}
+  - {type: host, database: all, user: all, address: '::1/128', auth_method: md5}
+
+# =====================================
+# Redis 配置 (geerlingguy.redis)
+# =====================================
+redis_password: "{{ vault_redis_password | default('') }}"
+redis_version: "7.0"
+redis_port: "6379"
+redis_bind_interface: "127.0.0.1"
+redis_timeout: 300
+redis_tcp_keepalive: 60
+redis_maxmemory: "256mb"
+redis_maxmemory_policy: "allkeys-lru"
+redis_save:
+  - 900 1
+  - 300 10
+  - 60 10000
+redis_appendonly: "yes"
+redis_appendfsync: "everysec"
+
+# =====================================
+# 兼容性配置（为了向后兼容现有playbooks）
+# =====================================
+# 从第一个应用获取默认值，用于向后兼容
+app_name: "{{ applications[0].name }}"
+app_port: "{{ applications[0].port }}"
+app_directory: "{{ applications[0].directory }}"
+app_git_repo: "{{ applications[0].git_repo }}"
+app_git_branch: "{{ applications[0].git_branch }}"
+app_secret_key: "{{ applications[0].env.SECRET_KEY }}"
+log_level: "{{ applications[0].env.LOG_LEVEL }}"

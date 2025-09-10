@@ -1,0 +1,54 @@
+---
+- name: Deploy Selected Applications
+  hosts: all
+  gather_facts: yes
+  vars:
+    target_apps: "{{ apps.split(',') if apps is defined else [] }}"
+  
+  pre_tasks:
+    - name: Validate target apps
+      fail:
+        msg: "请指定要部署的应用: -e apps=myapp,blog"
+      when: target_apps | length == 0
+    
+    - name: Display deployment plan
+      debug:
+        msg:
+          - "准备部署的应用列表: {{ target_apps }}"
+          - "总共 {{ target_apps | length }} 个应用"
+    
+    - name: Create application directories
+      include_tasks: ../tasks/create-app-directories.yml
+      loop: "{{ applications | selectattr('name', 'in', target_apps) }}"
+      loop_control:
+        loop_var: app_item
+      vars:
+        app_directory: "{{ app_item.directory }}"
+      tags: [app-setup]
+  
+  tasks:
+    - name: Clone/Update selected applications code
+      git:
+        repo: "{{ app_item.git_repo }}"
+        dest: "{{ app_item.directory }}"
+        version: "{{ app_item.git_branch }}"
+        force: yes
+      become_user: deploy
+      loop: "{{ applications | selectattr('name', 'in', target_apps) }}"
+      loop_control:
+        loop_var: app_item
+      tags: [git, deploy]
+    
+    - name: Deploy selected applications
+      include_tasks: ../tasks/deploy-single-webapp.yml
+      loop: "{{ applications | selectattr('name', 'in', target_apps) }}"
+      loop_control:
+        loop_var: current_app
+      tags: [docker, deploy]
+    
+    - name: Health check for selected apps
+      include_tasks: ../tasks/health-check-single.yml
+      loop: "{{ applications | selectattr('name', 'in', target_apps) }}"
+      loop_control:
+        loop_var: current_app
+      tags: [health-check]
