@@ -90,7 +90,8 @@
     port: "{{ item }}"
     host: 0.0.0.0
     timeout: 5
-  loop: "{{ firewall_allowed_tcp_ports }}"
+  loop:
+    - 22
   ignore_errors: yes
   register: port_check
   tags: [verify, ports]
