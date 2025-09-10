@@ -13,32 +13,95 @@
     fail_msg: "SSH service is not running properly"
     success_msg: "SSH service is running"
   tags: [verify, ssh]
-- name: Check firewall status (firewalld)
+- name: Debug OS information
+  debug:
+    msg:
+      - "OS Family: {{ ansible_os_family }}"
+      - "Distribution: {{ ansible_distribution }}"
+      - "Distribution Version: {{ ansible_distribution_version }}"
+  tags: [verify, firewall, debug]
+
+- name: Check if iptables is available (required for geerlingguy.firewall)
+  command: which iptables
+  register: iptables_available
+  changed_when: false
+  ignore_errors: yes
+  tags: [verify, firewall, debug]
+
+- name: Display iptables availability
+  debug:
+    msg: "iptables: {{ 'Available ✓' if iptables_available.rc == 0 else 'Not found ✗ - Required for geerlingguy.firewall!' }}"
+  tags: [verify, firewall, debug]
+
+- name: Check if firewalld is disabled (should be inactive)
   systemd:
     name: firewalld
-  register: firewall_service
+  register: firewalld_service_check
+  ignore_errors: yes
   tags: [verify, firewall]
 
-- name: Verify firewall is active
-  command: firewall-cmd --state
-  register: firewall_status
+- name: Check if ufw is disabled (should be inactive) 
+  systemd:
+    name: ufw
+  register: ufw_service_check
+  ignore_errors: yes
+  tags: [verify, firewall]
+
+- name: Verify conflicting firewalls are disabled
+  debug:
+    msg:
+      - "Firewalld status: {{ 'Properly disabled' if firewalld_service_check is defined and (firewalld_service_check.status.ActiveState != 'active' or firewalld_service_check.status.UnitFileState == 'disabled') else 'WARNING: Still active - may conflict!' }}"
+      - "UFW status: {{ 'Properly disabled' if ufw_service_check is defined and (ufw_service_check.status.ActiveState != 'active' or ufw_service_check.status.UnitFileState == 'disabled') else 'WARNING: Still active - may conflict!' }}"
+  tags: [verify, firewall]
+
+- name: Check geerlingguy firewall service (iptables-based)
+  systemd:
+    name: firewall
+  register: geerling_firewall_service
+  ignore_errors: yes
+  tags: [verify, firewall]
+
+- name: Check geerlingguy firewall status
+  command: service firewall status
+  register: geerling_firewall_status
+  changed_when: false
+  ignore_errors: yes
+  when: geerling_firewall_service is defined
+  tags: [verify, firewall]
+
+- name: Check iptables rules
+  command: iptables -L -n
+  register: iptables_rules
   changed_when: false
   ignore_errors: yes
   tags: [verify, firewall]
 
-- name: Get firewall zones and rules
-  command: firewall-cmd --list-all
-  register: firewall_rules
-  changed_when: false
-  when: firewall_status.rc == 0
+- name: Count iptables rules
+  set_fact:
+    iptables_rule_count: "{{ iptables_rules.stdout_lines | length }}"
+  when: 
+    - iptables_rules is defined
+    - iptables_rules.rc == 0
   tags: [verify, firewall]
 
-- name: Display firewall status
+- name: Check for custom firewall rules (geerlingguy pattern)
+  command: iptables -L INPUT -n --line-numbers
+  register: iptables_input_rules
+  changed_when: false
+  ignore_errors: yes
+  tags: [verify, firewall]
+
+- name: Display firewall status summary
   debug:
     msg: 
-      - "Firewall status: {{ firewall_status.stdout | default('Not running') }}"
-      - "{{ firewall_rules.stdout_lines | default([]) }}"
-  when: firewall_status is defined
+      - "========== Firewall Status Summary =========="
+      - "Primary Firewall (geerlingguy.firewall): {{ 'Active ✓' if geerling_firewall_service is defined and geerling_firewall_service.status.ActiveState == 'active' else 'Inactive ✗' }}"
+      - "Iptables rules configured: {{ iptables_rule_count | default('N/A') }} rules"
+      - "Conflicting firewall services:"
+      - "  - firewalld: {{ 'Disabled ✓' if firewalld_service_check is defined and firewalld_service_check.status.ActiveState != 'active' else 'WARNING: Active!' }}"
+      - "  - ufw: {{ 'Disabled ✓' if ufw_service_check is defined and ufw_service_check.status.ActiveState != 'active' else 'WARNING: Active!' }}"
+      - "============================================="
+  when: geerling_firewall_service is defined or iptables_rules is defined
   tags: [verify, firewall]
 - name: Check fail2ban service (production only)
   systemd:
@@ -171,7 +234,7 @@
       - "===== Security Verification Summary ====="
       - "Environment: {{ deploy_environment }}"
       - "SSH Service: {{ 'Running' if ssh_service.status.ActiveState == 'active' else 'Not Running' }}"
-      - "Firewall: {{ 'Active' if 'Status: active' in (ufw_status.stdout | default('')) else 'Inactive' }}"
+      - "Firewall: {{ 'Active (geerlingguy.firewall)' if geerling_firewall_service is defined and geerling_firewall_service.status.ActiveState == 'active' else 'Inactive' }}"
       - "Docker: {{ 'Running' if docker_service.status.ActiveState == 'active' else 'Not Running' }}"
       - "Fail2ban: {{ 'Running' if deploy_environment == 'production' and fail2ban_service is defined and fail2ban_service.status.ActiveState == 'active' else 'Not Required' if deploy_environment == 'testing' else 'Not Running' }}"
       - "Disk Usage: {{ disk_used_percent | default('Unknown') }}%"
@@ -188,7 +251,7 @@
       
       Service Status:
       - SSH: {{ 'OK' if ssh_service.status.ActiveState == 'active' else 'FAIL' }}
-      - Firewall: {{ 'OK' if 'Status: active' in (ufw_status.stdout | default('')) else 'FAIL' }}
+      - Firewall: {{ 'OK (geerlingguy.firewall)' if geerling_firewall_service is defined and geerling_firewall_service.status.ActiveState == 'active' else 'FAIL' }}
       - Docker: {{ 'OK' if docker_service.status.ActiveState == 'active' else 'FAIL' }}
       - Fail2ban: {{ 'OK' if deploy_environment == 'production' and fail2ban_service is defined and fail2ban_service.status.ActiveState == 'active' else 'N/A' }}
       

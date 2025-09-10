@@ -35,8 +35,13 @@ sshd:
   PasswordAuthentication: "no"
 
 # =====================================
-# 防火墙（基础端口）
+# 防火墙（geerlingguy.firewall 配置）
 # =====================================
+# 禁用冲突的防火墙服务
+firewall_disable_firewalld: true
+firewall_disable_ufw: true
+
+# 允许的端口配置
 firewall_allowed_tcp_ports:
   - "22"    # SSH
   - "80"    # HTTP
@@ -44,6 +49,10 @@ firewall_allowed_tcp_ports:
 
 firewall_allowed_udp_ports:
   - "443"   # QUIC/HTTP3
+
+# 防火墙服务状态
+firewall_state: started
+firewall_enabled_at_boot: true
 
 # =====================================
 # Docker
