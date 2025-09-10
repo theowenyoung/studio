@@ -11,10 +11,15 @@ roles:
   
   # 应用依赖
   - name: geerlingguy.docker
+    version: ">=7.0.0"
   - name: geerlingguy.git
+    version: ">=3.0.0"
   - name: geerlingguy.pip
+    version: ">=3.0.0"
   - name: geerlingguy.postgresql
+    version: ">=4.0.0"  # 确保支持最新的Debian版本
   - name: geerlingguy.redis
+    version: ">=1.9.0"
 
 collections:
   - name: community.general

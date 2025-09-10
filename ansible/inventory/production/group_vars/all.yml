@@ -16,6 +16,9 @@ common_packages:
   - curl
   - wget
   - vim
+  - python3-systemd  # fail2ban 需要的 systemd Python 绑定
+  - iptables         # fail2ban 需要的防火墙工具
+  - ipset            # fail2ban 优化工具
 
 # 只覆盖必要的配置，其余使用默认值
 # =====================================
@@ -33,6 +36,15 @@ users_user_list:
 sshd:
   PermitRootLogin: "no"
   PasswordAuthentication: "no"
+
+# =====================================
+# 安全配置（geerlingguy.security）
+# =====================================
+# 启用 fail2ban 安装和配置
+security_fail2ban_enabled: true
+security_sudoers_passwordless: ["deploy"]
+
+
 
 # =====================================
 # 防火墙（geerlingguy.firewall 配置）
@@ -148,8 +160,9 @@ caddy_config: |
 # PostgreSQL 配置 (geerlingguy.postgresql)
 # =====================================
 
+
 # PostgreSQL role 配置
-postgresql_version: "15"
+postgresql_version: "17"
 postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/main"
 postgresql_bin_path: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
 postgresql_config_path: "/etc/postgresql/{{ postgresql_version }}/main"
