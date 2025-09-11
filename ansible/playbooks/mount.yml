@@ -1,0 +1,180 @@
+---
+- name: Setup Data Storage Mount
+  hosts: all
+  become: yes
+  vars:
+    data_mount_point: "/data"
+    
+  tasks:
+    - name: Check current mount status
+      block:
+        - name: Check if mount point is already mounted
+          shell: |
+            if mountpoint -q "{{ data_mount_point }}"; then
+              echo "mounted"
+            elif [ -d "{{ data_mount_point }}" ]; then
+              echo "directory_exists"
+            else
+              echo "not_exists"
+            fi
+          register: mount_status
+          changed_when: false
+          failed_when: false
+
+        - name: Show current status
+          debug:
+            msg: "Current mount status: {{ mount_status.stdout }}"
+
+    - name: Setup mount if needed
+      block:
+        - name: Get all block devices info
+          command: lsblk -J -b -o NAME,SIZE,TYPE,MOUNTPOINT
+          register: block_devices_json
+          changed_when: false
+
+        - name: Find largest unmounted disk
+          set_fact:
+            data_disk: "/dev/{{ largest_unmounted_disk.name }}"
+            disk_size_gb: "{{ (largest_unmounted_disk.size | int / 1073741824) | round(1) }}"
+          vars:
+            all_devices: "{{ (block_devices_json.stdout | from_json).blockdevices }}"
+            unmounted_disks: >-
+              {{
+                all_devices | 
+                selectattr('type', 'equalto', 'disk') |
+                selectattr('mountpoint', 'none') |
+                selectattr('children', 'undefined') |
+                rejectattr('size', 'equalto', 0) |
+                sort(attribute='size', reverse=true) |
+                list
+              }}
+            largest_unmounted_disk: "{{ unmounted_disks[0] }}"
+          when: 
+            - mount_status.stdout != "mounted"
+            - unmounted_disks | length > 0
+
+        - name: Show selected disk info
+          debug:
+            msg: "Selected disk: {{ data_disk }} ({{ disk_size_gb }}GB)"
+          when: data_disk is defined
+
+        - name: Check if disk is already formatted with our label
+          command: blkid -L docker-data
+          register: labeled_disk_check
+          failed_when: false
+          changed_when: false
+          when: mount_status.stdout != "mounted"
+
+        - name: Format disk with ext4 if needed
+          filesystem:
+            fstype: ext4
+            dev: "{{ data_disk }}"
+            opts: -L docker-data
+          register: format_result
+          when: 
+            - data_disk is defined
+            - labeled_disk_check.rc != 0
+            - mount_status.stdout != "mounted"
+
+        - name: Create mount point directory
+          file:
+            path: "{{ data_mount_point }}"
+            state: directory
+            mode: '0755'
+          when: mount_status.stdout in ["not_exists", "directory_exists"]
+
+        - name: Mount data disk
+          mount:
+            path: "{{ data_mount_point }}"
+            src: "LABEL=docker-data"
+            fstype: ext4
+            opts: defaults,noatime
+            state: mounted
+          register: mount_result
+          when: mount_status.stdout != "mounted"
+
+        - name: Set ownership of mount point
+          file:
+            path: "{{ data_mount_point }}"
+            owner: "{{ ansible_user }}"
+            group: "{{ ansible_user }}"
+            mode: '0755'
+          when: mount_status.stdout != "mounted"
+
+      rescue:
+        - name: Handle setup failure
+          debug:
+            msg: "❌ FAILED: Data storage mount setup failed. Error: {{ ansible_failed_result.msg | default('Unknown error') }}"
+          
+        - name: Show troubleshooting info
+          debug:
+            msg: |
+              Troubleshooting information:
+              - Check available disks: lsblk
+              - Check current mounts: df -h
+              - Check filesystem labels: blkid
+          
+        - name: Fail the task
+          fail:
+            msg: "Data storage mount setup failed"
+
+    - name: Verify mount and show final status
+      block:
+        - name: Check final mount status
+          command: df -h "{{ data_mount_point }}"
+          register: final_mount_status
+          changed_when: false
+
+        - name: Ensure mount persists across reboots
+          lineinfile:
+            path: /etc/fstab
+            line: "LABEL=docker-data {{ data_mount_point }} ext4 defaults,noatime 0 2"
+            regexp: "^.*{{ data_mount_point }}.*$"
+            state: present
+            backup: yes
+          when: mount_status.stdout != "mounted"
+
+        - name: Test write permissions
+          file:
+            path: "{{ data_mount_point }}/.ansible-test"
+            state: touch
+            owner: "{{ ansible_user }}"
+          register: write_test
+          
+        - name: Clean up test file
+          file:
+            path: "{{ data_mount_point }}/.ansible-test"
+            state: absent
+          when: write_test is succeeded
+
+        - name: Show success message
+          debug:
+            msg: |
+              ✅ SUCCESS: Data storage mount is ready!
+              
+              Mount Information:
+              {{ final_mount_status.stdout_lines | join('\n              ') }}
+              
+              Mount Point: {{ data_mount_point }}
+              Filesystem: ext4 with label 'docker-data'
+              Status: {% if mount_status.stdout == "mounted" %}Already mounted (no changes needed){% else %}Newly mounted{% endif %}
+
+      rescue:
+        - name: Show verification failure
+          debug:
+            msg: "⚠️  WARNING: Mount completed but verification failed. Manual check recommended."
+
+      when: data_disk is defined or mount_status.stdout == "mounted"
+
+    - name: Show failure message if no suitable disk found
+      debug:
+        msg: |
+          ❌ FAILED: No suitable unmounted disk found for data storage.
+          
+          Requirements:
+          - Block volume must be attached to VPS
+          - Volume must not be already mounted  
+          - Volume must be larger than 0 bytes
+          
+          Run 'lsblk' to check available disks.
+      when: data_disk is not defined and mount_status.stdout != "mounted"

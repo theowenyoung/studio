@@ -10,3 +10,4 @@
   
 - import_playbook: bootstrap.yml
 - import_playbook: security.yml
+- import_playbook: mount.yml

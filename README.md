@@ -6,6 +6,8 @@ A unified monorepo containing all my public projects, experiments, and deploymen
 
 
 ```
+# 先在服务器挂载可变云盘，不需要自动挂载，待会儿初始化的时候会ansible会自动挂载，以后有状态的数据统一存储在这里。
+
 # 先在服务器创建 deploy 用户
 mise pre 1.2.3.4
 
