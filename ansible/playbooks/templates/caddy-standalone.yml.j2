@@ -18,10 +18,10 @@ services:
       - "127.0.0.1:2019:2019"  # Admin API
     
     volumes:
-      # 主配置文件
-      - /data/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # 主配置文件（来自配置目录）
+      - /srv/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       
-      # 数据目录（证书等）
+      # 数据目录（证书等持久化数据）
       - /data/caddy/data:/data
       
       # 配置缓存目录

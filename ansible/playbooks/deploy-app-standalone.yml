@@ -27,14 +27,22 @@
 
     - name: 创建应用目录
       file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0755'
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
       loop:
-        - /data/{{ app_name }}
-        - /data/{{ app_name }}/data
+        # 服务配置目录
+        - { path: "/srv/{{ app_name }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        # 应用数据目录
+        - { path: "/data/{{ app_name }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/data/{{ app_name }}/data", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        # 通用数据目录（应用负责创建）
+        - { path: "/data/uploads", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/data/logs", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/data/backups", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/data/backups/files", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
       tags: [setup]
 
     # 从 AWS Parameter Store 获取应用配置
@@ -48,27 +56,21 @@
         --region {{ aws_region | default('us-west-2') }}
       register: app_env_result
       changed_when: false
-      failed_when: false
-      become_user: "{{ deploy_user | default('deploy') }}"
+      failed_when: app_env_result.rc != 0
+      delegate_to: localhost
+      become: false
       tags: [secrets]
 
     - name: 创建应用环境文件
       copy:
         content: |
           # {{ app_name | upper }} 应用环境变量
-          {% if app_env_result.rc == 0 %}
           {{ app_env_result.stdout }}
-          {% else %}
-          # 回退默认配置
-          NODE_ENV=production
-          PORT={{ app_port }}
-          APP_NAME={{ app_name }}
-          {% endif %}
           
           # 系统生成的变量
           DEPLOY_TIME={{ ansible_date_time.iso8601 }}
           DEPLOY_ENV={{ deploy_environment | default('production') }}
-        dest: /data/{{ app_name }}/.env
+        dest: /srv/{{ app_name }}/.env
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
         mode: '0600'
@@ -79,7 +81,7 @@
     - name: 生成应用 Docker Compose 配置
       template:
         src: app-standalone.yml.j2
-        dest: /data/{{ app_name }}/docker-compose.yml
+        dest: /srv/{{ app_name }}/docker-compose.yml
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
         mode: '0644'
@@ -88,7 +90,7 @@
     # 部署应用
     - name: 启动应用服务
       community.docker.docker_compose_v2:
-        project_src: /data/{{ app_name }}
+        project_src: /srv/{{ app_name }}
         state: present
         pull: always
       become_user: "{{ deploy_user | default('deploy') }}"
@@ -117,10 +119,11 @@
           - "✅ {{ app_name }} 部署完成"
           - "访问地址: http://127.0.0.1:{{ app_port }}"
           - "健康检查: http://127.0.0.1:{{ app_port }}/health ({{ 'OK' if health_check is not failed else 'Failed' }})"
+          - "配置目录: /srv/{{ app_name }}"
           - "数据目录: /data/{{ app_name }}"
           - ""
           - "管理命令:"
-          - "  查看状态: cd /data/{{ app_name }} && docker compose ps"
-          - "  查看日志: docker logs {{ app_name }}"
+          - "  查看状态: cd /srv/{{ app_name }} && docker compose ps"
+          - "  查看日志: cd /srv/{{ app_name }} && docker compose logs {{ app_name }}"
           - "  零停机部署: docker rollout {{ app_name }}"
       tags: [info]

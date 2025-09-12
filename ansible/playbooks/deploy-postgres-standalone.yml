@@ -20,15 +20,21 @@
 
     - name: 创建 PostgreSQL 目录
       file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0755'
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
       loop:
-        - /data/postgres
-        - /data/postgres/data
-        - /data/postgres/init
+        # 服务配置目录
+        - { path: "/srv/postgres", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/srv/postgres/init", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        # 数据目录（PostgreSQL需要999用户ID）
+        - { path: "/data/postgres", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/data/postgres/data", owner: "999", group: "{{ deploy_user | default('deploy') }}", mode: "0750" }
+        # 备份目录（PostgreSQL 负责创建）
+        - { path: "/data/backups", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/data/backups/postgres", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
       tags: [setup]
 
     # 从 AWS Parameter Store 获取密码
@@ -43,7 +49,8 @@
       register: postgres_password_result
       changed_when: false
       failed_when: postgres_password_result.rc != 0
-      become_user: "{{ deploy_user | default('deploy') }}"
+      delegate_to: localhost
+      become: false
       tags: [secrets]
 
     - name: 创建 PostgreSQL 环境文件
@@ -51,7 +58,7 @@
         content: |
           # PostgreSQL 环境变量
           {{ postgres_password_result.stdout }}
-        dest: /data/postgres/.env
+        dest: /srv/postgres/.env
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
         mode: '0600'
@@ -62,7 +69,7 @@
     - name: 生成 PostgreSQL Docker Compose 配置
       template:
         src: postgres-standalone.yml.j2
-        dest: /data/postgres/docker-compose.yml
+        dest: /srv/postgres/docker-compose.yml
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
         mode: '0644'
@@ -87,7 +94,7 @@
           END
           $$;
           GRANT pg_monitor TO monitor;
-        dest: /data/postgres/init/01-extensions.sql
+        dest: /srv/postgres/init/01-extensions.sql
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
         mode: '0644'
@@ -96,7 +103,7 @@
     # 部署服务
     - name: 启动 PostgreSQL 服务
       community.docker.docker_compose_v2:
-        project_src: /data/postgres
+        project_src: /srv/postgres
         state: present
         pull: always
       become_user: "{{ deploy_user | default('deploy') }}"
@@ -110,7 +117,9 @@
       tags: [verify]
 
     - name: 验证 PostgreSQL 服务
-      command: docker exec postgres pg_isready -U postgres
+      command: docker compose exec -T postgres pg_isready -U postgres
+      args:
+        chdir: /srv/postgres
       register: pg_ready
       changed_when: false
       become_user: "{{ deploy_user | default('deploy') }}"
@@ -121,7 +130,8 @@
         msg:
           - "✅ PostgreSQL 部署完成"
           - "连接: postgresql://postgres:***@127.0.0.1:5432/postgres"
-          - "数据目录: /data/postgres"
-          - "管理: cd /data/postgres && docker compose"
-          - "日志: docker logs postgres"
+          - "配置目录: /srv/postgres"
+          - "数据目录: /data/postgres"  
+          - "管理: cd /srv/postgres && docker compose"
+          - "日志: cd /srv/postgres && docker compose logs postgres"
       tags: [info]

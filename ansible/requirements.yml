@@ -25,3 +25,5 @@ collections:
   - name: ansible.posix
   - name: maxhoesel.caddy
   - name: community.postgresql
+  - name: amazon.aws
+  - name: community.aws

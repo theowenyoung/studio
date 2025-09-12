@@ -20,15 +20,18 @@
 
     - name: 创建 Caddy 目录
       file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0755'
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
       loop:
-        - /data/caddy
-        - /data/caddy/config
-        - /data/caddy/data
+        # 服务配置目录
+        - { path: "/srv/caddy", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        # 数据目录（Caddy 证书和配置数据）
+        - { path: "/data/caddy", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/data/caddy/config", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
+        - { path: "/data/caddy/data", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
       tags: [setup]
 
     # 从 AWS Parameter Store 获取配置
@@ -42,21 +45,17 @@
         --region {{ aws_region | default('us-west-2') }}
       register: caddy_config_result
       changed_when: false
-      failed_when: false
-      become_user: "{{ deploy_user | default('deploy') }}"
+      failed_when: caddy_config_result.rc != 0
+      delegate_to: localhost
+      become: false
       tags: [secrets]
 
     - name: 创建 Caddy 环境文件
       copy:
         content: |
           # Caddy 环境变量
-          {% if caddy_config_result.rc == 0 %}
           {{ caddy_config_result.stdout }}
-          {% else %}
-          # 回退默认配置
-          ADMIN_EMAIL=admin@localhost
-          {% endif %}
-        dest: /data/caddy/.env
+        dest: /srv/caddy/.env
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
         mode: '0600'
@@ -93,7 +92,7 @@
           #     }
           #   }
           # }
-        dest: /data/caddy/Caddyfile
+        dest: /srv/caddy/Caddyfile
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
         mode: '0644'
@@ -103,7 +102,7 @@
     - name: 生成 Caddy Docker Compose 配置
       template:
         src: caddy-standalone.yml.j2
-        dest: /data/caddy/docker-compose.yml
+        dest: /srv/caddy/docker-compose.yml
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
         mode: '0644'
@@ -112,7 +111,7 @@
     # 部署服务
     - name: 启动 Caddy 服务
       community.docker.docker_compose_v2:
-        project_src: /data/caddy
+        project_src: /srv/caddy
         state: present
         pull: always
       become_user: "{{ deploy_user | default('deploy') }}"
@@ -146,10 +145,11 @@
           - "HTTPS: https://localhost (自动证书)"
           - "管理API: http://localhost:2019"
           - "配置文件: /data/caddy/Caddyfile"
+          - "配置目录: /srv/caddy"
           - "数据目录: /data/caddy"
-          - "管理: cd /data/caddy && docker compose"
-          - "日志: docker logs caddy"
+          - "管理: cd /srv/caddy && docker compose"
+          - "日志: cd /srv/caddy && docker compose logs caddy"
           - ""
           - "修改 Caddyfile 后重新加载:"
-          - "docker exec caddy caddy reload --config /etc/caddy/Caddyfile"
+          - "cd /srv/caddy && docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile"
       tags: [info]

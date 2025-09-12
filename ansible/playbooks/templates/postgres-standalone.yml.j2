@@ -29,11 +29,11 @@ services:
       - .env
     
     volumes:
-      # 数据持久化到 /data
+      # 数据持久化到 /data（纯数据目录）
       - /data/postgres/data:/var/lib/postgresql/data
       
-      # 初始化脚本（可选）
-      - /data/postgres/init:/docker-entrypoint-initdb.d:ro
+      # 初始化脚本（来自配置目录）
+      - /srv/postgres/init:/docker-entrypoint-initdb.d:ro
     
     networks:
       - shared_network

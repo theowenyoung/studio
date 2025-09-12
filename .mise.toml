@@ -98,8 +98,20 @@ run = "ansible-playbook ansible/playbooks/infra.yml"
 
 
 [tasks.postgres]
-description = "部署 PostgreSQL"
-run = "ansible-playbook ansible/playbooks/deploy-database.yml"
+description = "部署 PostgreSQL 独立服务"
+run = "ansible-playbook ansible/playbooks/deploy-postgres-standalone.yml"
+
+[tasks.redis]
+description = "部署 Redis 独立服务"
+run = "ansible-playbook ansible/playbooks/deploy-redis-standalone.yml"
+
+[tasks.caddy]
+description = "部署 Caddy 独立服务"
+run = "ansible-playbook ansible/playbooks/deploy-caddy-standalone.yml"
+
+[tasks.deploy-app]
+description = "部署应用服务，用法: mise deploy-app app-name"
+run = "ansible-playbook ansible/playbooks/deploy-app-standalone.yml --extra-vars app_name={{arg(name='app_name')}}"
 
 # .mise.toml
 
