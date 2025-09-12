@@ -101,4 +101,26 @@ run = "ansible-playbook ansible/playbooks/infra.yml"
 description = "部署 PostgreSQL"
 run = "ansible-playbook ansible/playbooks/deploy-database.yml"
 
+# .mise.toml
 
+[tasks.env]
+run = '''
+PROJECT=$(basename "$PWD")
+aws ssm get-parameter \
+  --name "/$PROJECT/.env" \
+  --with-decryption \
+  --query 'Parameter.Value' \
+  --output text > .env
+echo "✅ 开发环境已同步到 .env"
+'''
+
+[tasks."prod"]
+run = '''
+PROJECT=$(basename "$PWD")
+aws ssm get-parameter \
+  --name "/$PROJECT/.env.prod" \
+  --with-decryption \
+  --query 'Parameter.Value' \
+  --output text > .env.prod
+echo "✅ 生产环境已同步到 .env.prod"
+'''

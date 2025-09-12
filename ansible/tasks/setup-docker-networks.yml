@@ -1,9 +1,0 @@
----
-- name: Ensure Docker is running
-  systemd:
-    name: docker
-    state: started
-    enabled: yes
-
-# 注意：使用host网络模式，不需要创建自定义Docker网络
-# Web应用直接连接本地的PostgreSQL、Redis和Caddy服务

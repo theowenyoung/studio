@@ -1,0 +1,132 @@
+---
+# =====================================
+# PostgreSQL 独立部署
+# 完全自包含，最小依赖
+# =====================================
+- name: Deploy Standalone PostgreSQL
+  hosts: all
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: 显示 PostgreSQL 部署信息
+      debug:
+        msg:
+          - "部署独立 PostgreSQL 服务"
+          - "数据目录: /data/postgres"
+          - "网络: shared_network"
+          - "端口: 127.0.0.1:5432"
+      tags: [info]
+
+    - name: 创建 PostgreSQL 目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      loop:
+        - /data/postgres
+        - /data/postgres/data
+        - /data/postgres/init
+      tags: [setup]
+
+    # 从 AWS Parameter Store 获取密码
+    - name: 获取 PostgreSQL 管理员密码
+      command: >
+        aws ssm get-parameter
+        --name "/postgres/.env"
+        --with-decryption
+        --output text
+        --query 'Parameter.Value'
+        --region {{ aws_region | default('us-east-1') }}
+      register: postgres_password_result
+      changed_when: false
+      failed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [secrets]
+
+    - name: 创建 PostgreSQL 环境文件
+      copy:
+        content: |
+          # PostgreSQL 环境变量
+          {% if postgres_password_result.rc == 0 %}
+          {{ postgres_password_result.stdout }}
+          {% else %}
+          # 回退默认密码（请在生产环境中修改）
+          POSTGRES_PASSWORD=change-me-in-production
+          {% endif %}
+        dest: /data/postgres/.env
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0600'
+      no_log: true
+      tags: [secrets]
+
+    # 生成独立的 docker-compose.yml
+    - name: 生成 PostgreSQL Docker Compose 配置
+      template:
+        src: postgres-standalone.yml.j2
+        dest: /data/postgres/docker-compose.yml
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0644'
+      tags: [config]
+
+    # 可选：生成数据库初始化脚本
+    - name: 生成数据库初始化脚本（可选）
+      copy:
+        content: |
+          -- PostgreSQL 初始化脚本
+          -- 创建常用扩展
+          CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+          CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+          CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
+          
+          -- 创建监控用户
+          DO $$
+          BEGIN
+              IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'monitor') THEN
+                  CREATE USER monitor WITH PASSWORD 'monitor';
+              END IF;
+          END
+          $$;
+          GRANT pg_monitor TO monitor;
+        dest: /data/postgres/init/01-extensions.sql
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0644'
+      tags: [init]
+
+    # 部署服务
+    - name: 启动 PostgreSQL 服务
+      community.docker.docker_compose:
+        project_src: /data/postgres
+        state: present
+        pull: yes
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [deploy]
+
+    - name: 等待 PostgreSQL 服务就绪
+      wait_for:
+        port: 5432
+        host: 127.0.0.1
+        timeout: 60
+      tags: [verify]
+
+    - name: 验证 PostgreSQL 服务
+      command: docker exec postgres pg_isready -U postgres
+      register: pg_ready
+      changed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [verify]
+
+    - name: 显示部署结果
+      debug:
+        msg:
+          - "✅ PostgreSQL 部署完成"
+          - "连接: postgresql://postgres:***@127.0.0.1:5432/postgres"
+          - "数据目录: /data/postgres"
+          - "管理: cd /data/postgres && docker compose"
+          - "日志: docker logs postgres"
+      tags: [info]

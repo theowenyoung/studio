@@ -1,0 +1,162 @@
+---
+# =====================================
+# 独立服务批量部署
+# 按顺序部署所有独立服务
+# =====================================
+- name: Deploy All Standalone Services
+  hosts: all
+  gather_facts: yes
+  
+  tasks:
+    - name: 显示批量部署计划
+      debug:
+        msg:
+          - "=== 独立服务批量部署 ==="
+          - "环境: {{ deploy_environment | default('production') }}"
+          - "数据目录: /data/"
+          - "共享网络: shared_network"
+          - ""
+          - "部署顺序:"
+          - "1. PostgreSQL"
+          - "2. Redis" 
+          - "3. Caddy"
+          - "========================="
+      tags: [info]
+
+    # 确保基础设施已准备好
+    - name: 检查共享网络是否存在
+      command: docker network inspect shared_network
+      register: network_check
+      changed_when: false
+      failed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [verify]
+
+    - name: 提示运行基础设施准备
+      fail:
+        msg: |
+          共享网络不存在，请先运行基础设施准备:
+          ansible-playbook -i inventory/production playbooks/infra.yml
+      when: network_check.rc != 0
+      tags: [verify]
+
+    # =====================================
+    # 按顺序部署独立服务
+    # =====================================
+    
+    # 1. PostgreSQL
+    - name: 部署 PostgreSQL 服务
+      include: deploy-postgres-standalone.yml
+      tags: [postgres, database]
+
+    - name: 等待 PostgreSQL 完全启动
+      pause:
+        seconds: 10
+        prompt: "等待 PostgreSQL 服务稳定..."
+      tags: [postgres]
+
+    # 2. Redis
+    - name: 部署 Redis 服务
+      include: deploy-redis-standalone.yml
+      tags: [redis, cache]
+
+    - name: 等待 Redis 完全启动
+      pause:
+        seconds: 5
+        prompt: "等待 Redis 服务稳定..."
+      tags: [redis]
+
+    # 3. Caddy
+    - name: 部署 Caddy 服务
+      include: deploy-caddy-standalone.yml
+      tags: [caddy, proxy]
+
+    - name: 等待 Caddy 完全启动
+      pause:
+        seconds: 5
+        prompt: "等待 Caddy 服务稳定..."
+      tags: [caddy]
+
+    # =====================================
+    # 生成密钥管理脚本
+    # =====================================
+    - name: 生成独立密钥管理脚本
+      template:
+        src: manage-standalone-secrets.sh.j2
+        dest: /usr/local/bin/manage-secrets
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      tags: [tools]
+
+    # =====================================
+    # 最终验证
+    # =====================================
+    - name: 验证所有服务状态
+      block:
+        - name: 检查 PostgreSQL
+          wait_for:
+            port: 5432
+            host: 127.0.0.1
+            timeout: 10
+
+        - name: 检查 Redis
+          wait_for:
+            port: 6379
+            host: 127.0.0.1
+            timeout: 10
+
+        - name: 检查 Caddy
+          wait_for:
+            port: 80
+            host: 0.0.0.0
+            timeout: 10
+
+        - name: 检查 Caddy HTTPS
+          wait_for:
+            port: 443
+            host: 0.0.0.0
+            timeout: 10
+
+        - name: 检查 Caddy 管理接口
+          wait_for:
+            port: 2019
+            host: 127.0.0.1
+            timeout: 10
+
+      rescue:
+        - name: 服务验证失败
+          debug:
+            msg: "部分服务可能未正常启动，请检查日志"
+
+      tags: [verify]
+
+    # =====================================
+    # 部署总结
+    # =====================================
+    - name: 显示部署总结
+      debug:
+        msg:
+          - "🎉 独立服务部署完成！"
+          - ""
+          - "✅ 已部署的服务:"
+          - "   PostgreSQL: postgresql://postgres:***@127.0.0.1:5432/"
+          - "   Redis: redis://:***@127.0.0.1:6379/"
+          - "   Caddy: http://localhost (自动HTTPS)"
+          - ""
+          - "📁 服务目录:"
+          - "   /data/postgres/ - PostgreSQL 配置和数据"
+          - "   /data/redis/    - Redis 配置和数据"
+          - "   /data/caddy/    - Caddy 配置和数据"
+          - "   /data/myapp/    - 应用配置和数据"
+          - ""
+          - "🔧 管理命令:"
+          - "   查看状态: docker ps"
+          - "   管理密钥: manage-secrets"
+          - "   零停机部署: docker rollout <app-name>"
+          - ""
+          - "📋 下一步:"
+          - "1. 配置服务密钥: manage-secrets upload postgres"
+          - "2. 修改 Caddy 配置: vim /data/caddy/Caddyfile"
+          - "3. 部署应用: ansible-playbook playbooks/deploy-app-standalone.yml -e app_name=myapp"
+      tags: [info, summary]

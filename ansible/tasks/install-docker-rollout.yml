@@ -1,0 +1,124 @@
+---
+# =====================================
+# 安装 docker-rollout 零停机部署工具
+# https://github.com/wowu/docker-rollout
+# =====================================
+
+- name: 检查 docker-rollout 是否已安装
+  stat:
+    path: ~/.docker/cli-plugins/docker-rollout
+  register: docker_rollout_check
+  become_user: "{{ deploy_user | default('deploy') }}"
+  tags: [docker-rollout, check]
+
+- name: 显示当前安装状态
+  debug:
+    msg: "docker-rollout 状态: {{ 'Already installed ✓' if docker_rollout_check.stat.exists else 'Not installed, will install' }}"
+  tags: [docker-rollout, info]
+
+- name: 安装 docker-rollout
+  block:
+    - name: 创建 Docker CLI 插件目录
+      file:
+        path: ~/.docker/cli-plugins
+        state: directory
+        mode: '0755'
+      become_user: "{{ deploy_user | default('deploy') }}"
+
+    - name: 下载 docker-rollout 脚本
+      get_url:
+        url: https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout
+        dest: ~/.docker/cli-plugins/docker-rollout
+        mode: '0755'
+        timeout: 30
+      become_user: "{{ deploy_user | default('deploy') }}"
+      register: download_result
+
+    - name: 验证 docker-rollout 安装
+      command: docker rollout --help
+      register: rollout_help
+      changed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+
+    - name: 显示安装成功信息
+      debug:
+        msg:
+          - "docker-rollout 安装成功！"
+          - "版本信息: {{ rollout_help.stdout_lines[0] | default('docker-rollout CLI plugin') }}"
+          - "使用方法: docker rollout <service-name>"
+
+  when: not docker_rollout_check.stat.exists
+  tags: [docker-rollout, install]
+
+- name: 更新 docker-rollout（如果已存在）
+  block:
+    - name: 获取当前版本信息
+      command: docker rollout --help
+      register: current_version
+      changed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+
+    - name: 下载最新版本
+      get_url:
+        url: https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout
+        dest: ~/.docker/cli-plugins/docker-rollout
+        mode: '0755'
+        timeout: 30
+        force: yes
+      become_user: "{{ deploy_user | default('deploy') }}"
+      when: docker_rollout_force_update | default(false) | bool
+
+    - name: 验证更新后的版本
+      command: docker rollout --help
+      register: updated_version
+      changed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+      when: docker_rollout_force_update | default(false) | bool
+
+    - name: 显示版本信息
+      debug:
+        msg: "docker-rollout 已是最新版本: {{ current_version.stdout_lines[0] | default('docker-rollout CLI plugin') }}"
+      when: not (docker_rollout_force_update | default(false) | bool)
+
+  when: docker_rollout_check.stat.exists
+  tags: [docker-rollout, update]
+
+- name: 创建 docker-rollout 使用示例脚本
+  template:
+    src: docker-rollout-example.sh.j2
+    dest: "{{ docker_services_base_dir | default('/opt/services') }}/scripts/rollout-example.sh"
+    owner: "{{ deploy_user | default('deploy') }}"
+    group: "{{ deploy_user | default('deploy') }}"
+    mode: '0755'
+  tags: [docker-rollout, scripts]
+
+- name: 验证 docker-rollout 功能
+  block:
+    - name: 测试 docker-rollout 命令
+      command: docker rollout --help
+      register: final_test
+      changed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+
+    - name: 显示最终验证结果
+      debug:
+        msg:
+          - "✅ docker-rollout 安装验证成功"
+          - "🚀 现在可以使用零停机部署了"
+          - "示例用法:"
+          - "  docker rollout web"
+          - "  docker rollout -f docker-compose.yml --timeout 60 api"
+          - "📝 详细文档: https://github.com/wowu/docker-rollout"
+
+  rescue:
+    - name: 安装失败处理
+      debug:
+        msg:
+          - "❌ docker-rollout 安装或验证失败"
+          - "请检查网络连接和权限"
+          - "手动安装命令:"
+          - "  mkdir -p ~/.docker/cli-plugins"
+          - "  curl -o ~/.docker/cli-plugins/docker-rollout https://raw.githubusercontent.com/wowu/docker-rollout/main/docker-rollout"
+          - "  chmod +x ~/.docker/cli-plugins/docker-rollout"
+
+  tags: [docker-rollout, verify]

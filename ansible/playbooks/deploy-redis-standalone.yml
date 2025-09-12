@@ -1,0 +1,109 @@
+---
+# =====================================
+# Redis 独立部署
+# 完全自包含，最小依赖
+# =====================================
+- name: Deploy Standalone Redis
+  hosts: all
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: 显示 Redis 部署信息
+      debug:
+        msg:
+          - "部署独立 Redis 服务"
+          - "数据目录: /data/redis"
+          - "网络: shared_network"
+          - "端口: 127.0.0.1:6379"
+      tags: [info]
+
+    - name: 创建 Redis 目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      loop:
+        - /data/redis
+        - /data/redis/data
+      tags: [setup]
+
+    # 从 AWS Parameter Store 获取密码
+    - name: 获取 Redis 密码
+      command: >
+        aws ssm get-parameter
+        --name "/redis/.env"
+        --with-decryption
+        --output text
+        --query 'Parameter.Value'
+        --region {{ aws_region | default('us-east-1') }}
+      register: redis_password_result
+      changed_when: false
+      failed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [secrets]
+
+    - name: 创建 Redis 环境文件
+      copy:
+        content: |
+          # Redis 环境变量
+          {% if redis_password_result.rc == 0 %}
+          {{ redis_password_result.stdout }}
+          {% else %}
+          # 回退默认密码（请在生产环境中修改）
+          REDIS_PASSWORD=change-me-in-production
+          {% endif %}
+        dest: /data/redis/.env
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0600'
+      no_log: true
+      tags: [secrets]
+
+    # 生成独立的 docker-compose.yml
+    - name: 生成 Redis Docker Compose 配置
+      template:
+        src: redis-standalone.yml.j2
+        dest: /data/redis/docker-compose.yml
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0644'
+      tags: [config]
+
+    # 部署服务
+    - name: 启动 Redis 服务
+      community.docker.docker_compose:
+        project_src: /data/redis
+        state: present
+        pull: yes
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [deploy]
+
+    - name: 等待 Redis 服务就绪
+      wait_for:
+        port: 6379
+        host: 127.0.0.1
+        timeout: 30
+      tags: [verify]
+
+    - name: 验证 Redis 服务
+      shell: |
+        password=$(cat /data/redis/.env | grep REDIS_PASSWORD | cut -d= -f2)
+        docker exec redis redis-cli --no-auth-warning -a "$password" ping
+      register: redis_ping
+      changed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+      no_log: true
+      tags: [verify]
+
+    - name: 显示部署结果
+      debug:
+        msg:
+          - "✅ Redis 部署完成"
+          - "连接: redis://:***@127.0.0.1:6379/0"
+          - "数据目录: /data/redis"
+          - "管理: cd /data/redis && docker compose"
+          - "日志: docker logs redis"
+      tags: [info]

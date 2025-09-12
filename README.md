@@ -20,6 +20,8 @@ Host prodowen1
 
 # 初始化服务器
 mise bootstrapserverwithoutpass
+
+# 上面的部署会自动把 block 挂载在 /data 目录下，以后目录就都放在 /data 下即可
 ```
 
 
@@ -74,6 +76,35 @@ destroy_test:
     - ./scripts/destroy-test-env.sh "$TEST_ID"
   when: manual
 ```
+
+## 🚀 新增功能: 零停机部署
+
+基于 [docker-rollout](https://github.com/wowu/docker-rollout) 的现代化零停机部署方案现已集成：
+
+```bash
+# 完整技术栈部署（PostgreSQL + Redis + Caddy + 应用）
+cd ansible
+ansible-playbook -i inventory/production playbooks/deploy-full-stack.yml
+
+# 零停机应用更新
+docker rollout myapp
+
+# 简化密钥管理（每应用一个 .env 文件）
+./scripts/manage-secrets.sh upload myapp
+```
+
+### 核心特性
+
+- 🔥 **零停机部署**: 用户无感知的应用更新
+- 🔐 **简化密钥**: AWS Parameter Store 集成，每应用一个 `.env`
+- ❤️ **健康检查**: 自动检测应用就绪状态
+- 🛡️ **优雅停机**: 完整的请求排空机制
+- 📁 **统一存储**: 所有数据存储在 `/data` 目录
+
+详细文档：
+- [零停机部署指南](ansible/ZERO-DOWNTIME-DEPLOYMENT.md)
+- [基础设施文档](ansible/DOCKER-SERVICES-README.md)
+- [密钥管理工作流](ansible/AWS-SECRETS-WORKFLOW.md)
 
 ## Requirements
 

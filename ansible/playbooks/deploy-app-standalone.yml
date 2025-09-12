@@ -1,0 +1,126 @@
+---
+# =====================================
+# 应用独立部署
+# 完全自包含，最小依赖
+# =====================================
+- name: Deploy Standalone Application
+  hosts: all
+  gather_facts: yes
+  become: yes
+  
+  vars:
+    # 从命令行参数获取应用名和端口
+    app_name: "{{ app_name | default('myapp') }}"
+    app_port: "{{ app_port | default('3000') }}"
+    app_domain: "{{ app_domain | default('localhost') }}"
+  
+  tasks:
+    - name: 显示应用部署信息
+      debug:
+        msg:
+          - "部署独立应用: {{ app_name }}"
+          - "端口: {{ app_port }}"
+          - "域名: {{ app_domain }}"
+          - "数据目录: /data/{{ app_name }}"
+          - "网络: shared_network"
+      tags: [info]
+
+    - name: 创建应用目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      loop:
+        - /data/{{ app_name }}
+        - /data/{{ app_name }}/data
+      tags: [setup]
+
+    # 从 AWS Parameter Store 获取应用配置
+    - name: 获取应用环境变量
+      command: >
+        aws ssm get-parameter
+        --name "/{{ app_name }}/.env"
+        --with-decryption
+        --output text
+        --query 'Parameter.Value'
+        --region {{ aws_region | default('us-east-1') }}
+      register: app_env_result
+      changed_when: false
+      failed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [secrets]
+
+    - name: 创建应用环境文件
+      copy:
+        content: |
+          # {{ app_name | upper }} 应用环境变量
+          {% if app_env_result.rc == 0 %}
+          {{ app_env_result.stdout }}
+          {% else %}
+          # 回退默认配置
+          NODE_ENV=production
+          PORT={{ app_port }}
+          APP_NAME={{ app_name }}
+          {% endif %}
+          
+          # 系统生成的变量
+          DEPLOY_TIME={{ ansible_date_time.iso8601 }}
+          DEPLOY_ENV={{ deploy_environment | default('production') }}
+        dest: /data/{{ app_name }}/.env
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0600'
+      no_log: true
+      tags: [secrets]
+
+    # 生成独立的 docker-compose.yml
+    - name: 生成应用 Docker Compose 配置
+      template:
+        src: app-standalone.yml.j2
+        dest: /data/{{ app_name }}/docker-compose.yml
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0644'
+      tags: [config]
+
+    # 部署应用
+    - name: 启动应用服务
+      community.docker.docker_compose:
+        project_src: /data/{{ app_name }}
+        state: present
+        pull: yes
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [deploy]
+
+    - name: 等待应用服务就绪
+      wait_for:
+        port: "{{ app_port }}"
+        host: 127.0.0.1
+        timeout: 60
+      tags: [verify]
+
+    - name: 验证应用健康检查
+      uri:
+        url: "http://127.0.0.1:{{ app_port }}/health"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: health_check
+      ignore_errors: yes
+      tags: [verify]
+
+    - name: 显示部署结果
+      debug:
+        msg:
+          - "✅ {{ app_name }} 部署完成"
+          - "访问地址: http://127.0.0.1:{{ app_port }}"
+          - "健康检查: http://127.0.0.1:{{ app_port }}/health ({{ 'OK' if health_check is not failed else 'Failed' }})"
+          - "数据目录: /data/{{ app_name }}"
+          - ""
+          - "管理命令:"
+          - "  查看状态: cd /data/{{ app_name }} && docker compose ps"
+          - "  查看日志: docker logs {{ app_name }}"
+          - "  零停机部署: docker rollout {{ app_name }}"
+      tags: [info]

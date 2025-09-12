@@ -1,0 +1,155 @@
+---
+# =====================================
+# Caddy 独立部署
+# 完全自包含，最小依赖
+# =====================================
+- name: Deploy Standalone Caddy
+  hosts: all
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: 显示 Caddy 部署信息
+      debug:
+        msg:
+          - "部署独立 Caddy 服务"
+          - "数据目录: /data/caddy"
+          - "网络: shared_network"
+          - "端口: 80, 443"
+      tags: [info]
+
+    - name: 创建 Caddy 目录
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      loop:
+        - /data/caddy
+        - /data/caddy/config
+        - /data/caddy/data
+      tags: [setup]
+
+    # 从 AWS Parameter Store 获取配置
+    - name: 获取 Caddy 配置
+      command: >
+        aws ssm get-parameter
+        --name "/caddy/.env"
+        --with-decryption
+        --output text
+        --query 'Parameter.Value'
+        --region {{ aws_region | default('us-east-1') }}
+      register: caddy_config_result
+      changed_when: false
+      failed_when: false
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [secrets]
+
+    - name: 创建 Caddy 环境文件
+      copy:
+        content: |
+          # Caddy 环境变量
+          {% if caddy_config_result.rc == 0 %}
+          {{ caddy_config_result.stdout }}
+          {% else %}
+          # 回退默认配置
+          ADMIN_EMAIL=admin@localhost
+          {% endif %}
+        dest: /data/caddy/.env
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0600'
+      no_log: true
+      tags: [secrets]
+
+    # 生成基础 Caddyfile
+    - name: 生成基础 Caddyfile
+      copy:
+        content: |
+          # Caddy 基础配置
+          {
+            email admin@localhost
+            # 本地开发使用本地证书
+            # 生产环境会自动使用 Let's Encrypt
+            {% if deploy_environment != 'production' %}
+            local_certs
+            {% endif %}
+          }
+          
+          # 默认响应（可以根据需要修改）
+          :80 {
+            respond "Caddy is running - $(date)" 200
+          }
+          
+          # 示例应用代理配置（取消注释并修改域名）
+          # example.com {
+          #   reverse_proxy myapp:3000
+          #   
+          #   log {
+          #     output file /data/example.log {
+          #       roll_size 10MB
+          #       roll_keep 5
+          #     }
+          #   }
+          # }
+        dest: /data/caddy/Caddyfile
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0644'
+      tags: [config]
+
+    # 生成独立的 docker-compose.yml
+    - name: 生成 Caddy Docker Compose 配置
+      template:
+        src: caddy-standalone.yml.j2
+        dest: /data/caddy/docker-compose.yml
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0644'
+      tags: [config]
+
+    # 部署服务
+    - name: 启动 Caddy 服务
+      community.docker.docker_compose:
+        project_src: /data/caddy
+        state: present
+        pull: yes
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [deploy]
+
+    - name: 等待 Caddy 服务就绪
+      wait_for:
+        port: "{{ item }}"
+        host: 0.0.0.0
+        timeout: 30
+      loop:
+        - 80
+        - 443
+        - 2019
+      tags: [verify]
+
+    - name: 验证 Caddy 服务
+      uri:
+        url: http://localhost:2019/config/
+        method: GET
+        status_code: 200
+      register: caddy_admin_check
+      ignore_errors: yes
+      tags: [verify]
+
+    - name: 显示部署结果
+      debug:
+        msg:
+          - "✅ Caddy 部署完成"
+          - "HTTP: http://localhost"
+          - "HTTPS: https://localhost (自动证书)"
+          - "管理API: http://localhost:2019"
+          - "配置文件: /data/caddy/Caddyfile"
+          - "数据目录: /data/caddy"
+          - "管理: cd /data/caddy && docker compose"
+          - "日志: docker logs caddy"
+          - ""
+          - "修改 Caddyfile 后重新加载:"
+          - "docker exec caddy caddy reload --config /etc/caddy/Caddyfile"
+      tags: [info]

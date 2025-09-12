@@ -37,7 +37,3 @@
         state: present
       when: common_packages is defined
       tags: [packages, common]
-
-    - name: Setup Docker networks
-      include_tasks: ../tasks/setup-docker-networks.yml
-      tags: [docker]
