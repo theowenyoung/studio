@@ -1,145 +1,37 @@
 ---
 # =====================================
 # Database Tasks 基础设施部署
-# 简单直接，自包含
+# 使用统一部署脚本
 # =====================================
 - name: Deploy Database Tasks Infrastructure
   hosts: all
   gather_facts: yes
   become: yes
   
-  vars:
-    service_name: database-tasks
-    service_config_dir: "/srv/database-tasks"
-    service_data_dir: "/data/database-tasks"
-    
   tasks:
-    - name: 显示部署信息
-      debug:
-        msg:
-          - "部署 Database Tasks 基础设施服务"
-          - "配置目录: {{ service_config_dir }}"
-          - "数据目录: {{ service_data_dir }}"
-          - "注意: Database Tasks 不会自动启动，仅准备环境"
+    - name: 设置 Database Tasks 环境
+      script: "{{ playbook_dir }}/../../infra-apps/database-tasks/deploy.sh setup"
+      environment:
+        ENV_MODE: aws
+        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
+        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
+      register: db_tasks_setup_result
     
-    # 创建目录结构
-    - name: 创建 Database Tasks 目录
-      file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - { path: "{{ service_config_dir }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_config_dir }}/tasks", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_data_dir }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_data_dir }}/logs", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "/data/backups/database-tasks", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-
-    # 获取环境变量
-    - name: 获取 Database Tasks 环境变量
-      command: >
-        aws ssm get-parameter
-        --name "/database-tasks/.env"
-        --with-decryption
-        --output text
-        --query 'Parameter.Value'
-        --region {{ aws_region | default('us-west-2') }}
-      register: db_tasks_env_result
-      changed_when: false
-      failed_when: db_tasks_env_result.rc != 0
-      delegate_to: localhost
-      become: false
-
-    # 生成配置文件
-    - name: 生成 Docker Compose 配置
-      template:
-        src: "{{ playbook_dir }}/../../infra-apps/database-tasks/docker-compose.yml.j2"
-        dest: "{{ service_config_dir }}/docker-compose.yml"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0644'
-
-    - name: 创建环境变量文件
-      copy:
-        content: |
-          # Database Tasks 环境变量
-          {{ db_tasks_env_result.stdout }}
-        dest: "{{ service_config_dir }}/.env"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0600'
-      no_log: true
-
-    - name: 复制数据库任务模板
-      copy:
-        src: "{{ playbook_dir }}/../../infra-apps/database-tasks/tasks/"
-        dest: "{{ service_config_dir }}/tasks/"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0644'
-
-    # 注意：Database Tasks 不自动启动，只准备环境
-    # 可选：执行指定的数据库任务
-    - name: 检查是否需要执行任务
+    - name: 显示设置结果
       debug:
-        msg: "准备执行数据库任务: {{ task_name }}"
+        var: db_tasks_setup_result.stdout_lines
+
+    # 可选：执行指定的数据库任务
+    - name: 执行数据库任务
+      script: "{{ playbook_dir }}/../../infra-apps/database-tasks/deploy.sh run {{ task_name }}"
+      environment:
+        ENV_MODE: aws
+        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
+        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
+      register: db_task_result
       when: task_name is defined and task_name != ""
-      
-    - name: 验证任务文件存在
-      stat:
-        path: "{{ playbook_dir }}/../../infra-apps/database-tasks/tasks/{{ task_name }}"
-      register: task_file_check
-      delegate_to: localhost
-      become: false
-      when: task_name is defined and task_name != ""
-      
-    - name: 启动任务容器并执行
-      shell: |
-        cd {{ service_config_dir }}
-        docker compose --profile task up -d db-task-runner
-        sleep 3
-        docker compose --profile task exec -T db-task-runner \
-          bash -c 'sed "s/\$TEST_DEMO_PASSWORD/$TEST_DEMO_PASSWORD/g" /tasks/{{ task_name }} | psql --echo-all --set ON_ERROR_STOP=1'
-        docker compose --profile task down db-task-runner
-      become_user: "{{ deploy_user | default('deploy') }}"
-      register: task_result
-      when: task_name is defined and task_name != "" and task_file_check.stat.exists
       
     - name: 显示任务执行结果
       debug:
-        msg:
-          - "✅ 数据库任务执行完成: {{ task_name }}"
-          - "退出码: {{ task_result.rc }}"
-          - "标准输出: {{ task_result.stdout }}"
-          - "错误输出: {{ task_result.stderr }}"
-      when: task_name is defined and task_result is defined and not task_result.skipped|default(false)
-      
-    - name: 任务执行失败时显示详细错误
-      debug:
-        msg:
-          - "❌ 数据库任务执行失败: {{ task_name }}"
-          - "退出码: {{ task_result.rc }}"
-          - "错误详情: {{ task_result.stderr }}"
-      when: task_name is defined and task_result is defined and not task_result.skipped|default(false) and task_result.rc != 0
-      
-    - name: 任务文件不存在时的提示
-      debug:
-        msg:
-          - "❌ 任务文件不存在: {{ task_name }}"
-          - "请检查文件路径: infra-apps/database-tasks/tasks/{{ task_name }}"
-      when: task_name is defined and task_name != "" and (task_file_check is not defined or not task_file_check.stat.exists)
-      
-    - name: 显示部署结果
-      debug:
-        msg:
-          - "✅ Database Tasks 环境准备完成"
-          - "配置目录: {{ service_config_dir }}"
-          - "数据目录: {{ service_data_dir }}"
-          - "任务模板: {{ service_config_dir }}/tasks/"
-          - "日志目录: {{ service_data_dir }}/logs/"
-          - ""
-          - "🔧 使用方法:"
-          - "  执行任务: mise run-db-task 20250912-create-test-database.sql"
-          - "  查看任务: ls infra-apps/database-tasks/tasks/*.sql"
+        var: db_task_result.stdout_lines
+      when: task_name is defined and task_name != "" and db_task_result is defined

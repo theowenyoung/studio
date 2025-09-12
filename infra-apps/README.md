@@ -1,106 +1,142 @@
 # Infrastructure Apps
 
-统一的基础设施应用配置管理。
+简化的基础设施应用配置管理，支持本地开发和生产部署。
 
-## 目录结构
+## 🏗️ 目录结构
 
 ```
 infra-apps/
-├── postgres/                   # PostgreSQL 配置
-│   ├── docker-compose.yml.j2  # Docker Compose 模板
-│   ├── env-template           # 环境变量模板
+├── postgres/                   # PostgreSQL 数据库
+│   ├── docker-compose.yml     # 本地开发配置（默认）
+│   ├── docker-compose.prod.yml # 生产环境配置
+│   ├── deploy.sh              # 统一部署脚本
+│   ├── env-example            # 环境变量示例
 │   └── init/                  # 初始化脚本
 │       └── 01-extensions.sql
-├── redis/                     # Redis 配置
-│   ├── docker-compose.yml.j2
-│   └── env-template
-├── caddy/                     # Caddy 配置
-│   ├── docker-compose.yml.j2
-│   ├── Caddyfile.j2          # Caddy 配置模板
-│   └── env-template
+├── redis/                     # Redis 缓存
+│   ├── docker-compose.yml
+│   ├── docker-compose.prod.yml
+│   ├── deploy.sh
+│   └── env-example
+├── caddy/                     # Caddy 反向代理
+│   ├── docker-compose.yml
+│   ├── docker-compose.prod.yml
+│   ├── Caddyfile.local        # 本地开发配置
+│   ├── Caddyfile.prod.template # 生产环境模板
+│   ├── deploy.sh
+│   └── env-example
 ├── database-tasks/            # 数据库任务执行器
-│   ├── docker-compose.yml.j2
-│   ├── env-template
-│   └── tasks/
-│       └── template-create-app-db.sql
+│   ├── docker-compose.yml
+│   ├── docker-compose.prod.yml
+│   ├── deploy.sh
+│   ├── env-example
+│   └── tasks/                 # 数据库任务脚本
+│       └── *.sql
+├── app/                       # 应用服务
+│   ├── docker-compose.yml
+│   ├── docker-compose.prod.yml
+│   ├── deploy.sh
+│   ├── env-example
+│   └── src/                   # 应用代码
 └── README.md
 ```
 
-## 部署架构
+## 🚀 部署架构
 
-### 配置管理
-- **源配置**: `infra-apps/` - 版本控制的配置模板
-- **运行配置**: `/srv/` - 部署时生成的实际配置
-- **持久化数据**: `/data/` - 数据文件和日志
+### 本地开发
+- **配置**: 直接使用 `docker-compose.yml`（默认文件名）
+- **域名**: 使用 localhost 子域名（app.localhost, admin.localhost 等，无需配置 hosts）
+- **证书**: 使用 mkcert 生成的本地证书（自动受信任）
+- **密码**: 硬编码在配置中，如 `local_dev_password_123`
 
-### 部署流程
-1. Ansible 从 `infra-apps/` 读取配置模板
-2. 从 AWS Parameter Store 获取环境变量
-3. 处理模板并复制到 `/srv/`
-4. 启动 Docker Compose 服务
+### 生产环境  
+- **配置**: 使用 `docker-compose.prod.yml` + `envsubst` 处理变量
+- **域名**: 从环境变量获取
+- **证书**: Let's Encrypt 自动生成
+- **密码**: 从 AWS Parameter Store 获取
 
-## 使用方法
+## 🎯 使用方法
 
-### 部署服务
+### 本地开发
 ```bash
-# 使用通用部署任务
-mise deploy-infra postgres
-mise deploy-infra redis
-mise deploy-infra caddy
-mise deploy-infra database-tasks
+# 首次设置（一键安装 mkcert + 生成证书）
+mise setup-local      # 安装 mkcert、生成证书、创建目录
 
-# 或使用旧的专用任务（向后兼容）
-mise run postgres
-mise run redis
-mise run caddy
+# 启动完整开发环境  
+mise service
+
+# 或单独启动服务
+mise dev-postgres     # PostgreSQL
+mise dev-redis        # Redis  
+mise dev-caddy        # Caddy
+mise dev-app          # 应用
+
+# 或直接使用 Docker
+cd infra-apps/postgres
+docker compose up -d
 ```
 
-### 管理服务
-```bash
-# 查看服务状态
-cd /srv/postgres && docker compose ps
+### 生产部署
+```bash  
+# 使用 mise（推荐）
+mise deploy-postgres   # 单独部署
+mise deploy-all        # 批量部署
 
-# 查看日志
-cd /srv/postgres && docker compose logs
+# 使用 Ansible（向后兼容）
+ansible-playbook ansible/playbooks/deploy-postgres-infra.yml
 
-# 重启服务
-cd /srv/postgres && docker compose restart
+# 直接使用部署脚本
+cd infra-apps/postgres
+ENV_MODE=aws ./deploy.sh
 ```
 
 ### 数据库任务
 ```bash
-# 创建数据库任务
-mise create-db-task create-myapp-db
+# 列出可用任务
+mise db-list
 
-# 执行数据库任务
-mise run-db-task 20250912-create-myapp-db
+# 执行任务
+mise db-task task_file=create-user.sql
 
-# 查看任务日志（日志保存在 /data/database-tasks/logs/）
-mise view-db-task-log 20250912-create-myapp-db
+# 或直接使用脚本
+cd infra-apps/database-tasks
+./deploy.sh list
+./deploy.sh run create-user.sql
 ```
 
-## 配置文件说明
+## 📝 配置文件说明
 
-### Docker Compose 模板 (*.yml.j2)
-- 使用 Jinja2 模板语法
-- 支持条件判断和变量替换
-- 部署时由 Ansible 处理
+### Docker Compose 配置
+- `docker-compose.yml` - 本地开发配置，硬编码密码和配置
+- `docker-compose.prod.yml` - 生产配置，使用环境变量
 
-### 环境变量模板 (env-template)
-- 定义各服务需要的环境变量
-- 部署时从 AWS Parameter Store 获取实际值
-- 使用 Ansible 变量语法 `{{ variable_name }}`
+### 环境变量文件
+- `env-example` - 环境变量示例和说明
+- 本地开发：大部分配置硬编码，无需环境文件
+- 生产环境：敏感信息从 AWS Parameter Store 获取
 
-### 初始化和配置脚本
-- PostgreSQL: `init/01-extensions.sql` - 数据库扩展和系统配置
-- Caddy: `Caddyfile.j2` - Web 服务器配置
-- Database Tasks: `tasks/template-*.sql` - 数据库管理任务模板
+### 部署脚本 (deploy.sh)
+- 支持本地 (`ENV_MODE=local`) 和生产 (`ENV_MODE=aws`) 模式
+- 统一的部署逻辑，彩色日志输出
+- 完整的错误处理和健康检查
 
-## 优势
+### Caddy 特殊配置
+- `Caddyfile.local` - 本地开发，硬编码域名和路由
+- `Caddyfile.prod.template` - 生产模板，使用 envsubst 处理
 
-1. **统一管理**: 所有基础设施配置集中在一个位置
-2. **版本控制**: 配置模板可以版本控制，便于回滚和审计
-3. **模板化**: 支持多环境部署，通过变量控制不同配置
-4. **职责分离**: Ansible 专注部署逻辑，配置文件专注服务定义
-5. **可扩展**: 添加新服务只需在 `infra-apps/` 添加相应目录和配置
+## ✨ 优势
+
+1. **简化配置**: 取消复杂模板系统，直接编写配置文件
+2. **本地友好**: 支持 HTTPS，一键启动完整开发环境  
+3. **统一部署**: 本地和生产使用相同的部署脚本
+4. **易于维护**: 每个服务自包含，配置清晰易懂
+5. **向后兼容**: 原有 Ansible 工作流程仍然可用
+
+## 🔄 从旧版本迁移
+
+如果你之前使用模板文件 (*.j2)，现在已经简化为：
+- ✅ 删除了所有 `.j2` 模板文件
+- ✅ 统一使用 `env-example` 而不是 `env-template`  
+- ✅ Ansible playbooks 现在调用 `deploy.sh` 脚本
+- ✅ 保持向后兼容，原有命令仍然可用
 

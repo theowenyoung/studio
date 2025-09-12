@@ -1,0 +1,79 @@
+# =====================================
+# Caddy 生产环境配置模板
+# 使用 envsubst 替换变量
+# =====================================
+
+{
+    # Let's Encrypt 邮箱
+    email ${ADMIN_EMAIL}
+    
+    # 生产环境配置
+    admin off
+}
+
+# 主应用域名
+${TEST_DEMO_DOMAIN} {
+    # 健康检查端点
+    handle /health {
+        respond "OK" 200
+        header Content-Type "text/plain"
+    }
+    
+    # API 路由
+    handle /api/* {
+        reverse_proxy app:3000 {
+            header_up Host {http.request.host}
+            header_up X-Real-IP {http.request.remote.host}
+            header_up X-Forwarded-For {http.request.remote.host}
+            header_up X-Forwarded-Proto {http.request.scheme}
+        }
+    }
+    
+    # 静态文件服务
+    handle /static/* {
+        root * /data/uploads
+        file_server
+    }
+    
+    # 上传文件服务
+    handle /uploads/* {
+        root * /data
+        file_server
+    }
+    
+    # 默认应用路由
+    handle {
+        reverse_proxy app:3000 {
+            header_up Host {http.request.host}
+            header_up X-Real-IP {http.request.remote.host}
+            header_up X-Forwarded-For {http.request.remote.host}
+            header_up X-Forwarded-Proto {http.request.scheme}
+        }
+    }
+    
+    # 安全头
+    header {
+        # 启用 HSTS
+        Strict-Transport-Security max-age=31536000;
+        # 防止点击劫持
+        X-Frame-Options DENY
+        # 防止 MIME 类型嗅探
+        X-Content-Type-Options nosniff
+        # XSS 保护
+        X-XSS-Protection "1; mode=block"
+        # 隐藏 Server 头
+        -Server
+    }
+    
+    # 访问日志
+    log {
+        output file /var/log/caddy/app-access.log
+        format json
+        level INFO
+    }
+}
+
+# HTTP 重定向到 HTTPS - 匹配所有域名
+:80 {
+    redir https://{host}{uri} permanent
+}

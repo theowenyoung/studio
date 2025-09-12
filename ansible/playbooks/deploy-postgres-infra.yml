@@ -1,112 +1,22 @@
 ---
 # =====================================
 # PostgreSQL 基础设施部署
-# 简单直接，自包含
+# 使用统一部署脚本
 # =====================================
 - name: Deploy PostgreSQL Infrastructure
   hosts: all
   gather_facts: yes
   become: yes
   
-  vars:
-    service_name: postgres
-    service_config_dir: "/srv/postgres"
-    service_data_dir: "/data/postgres"
-    
   tasks:
-    - name: 显示部署信息
-      debug:
-        msg:
-          - "部署 PostgreSQL 基础设施服务"
-          - "配置目录: {{ service_config_dir }}"
-          - "数据目录: {{ service_data_dir }}"
-    
-    # 创建目录结构
-    - name: 创建 PostgreSQL 目录
-      file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - { path: "{{ service_config_dir }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_config_dir }}/init", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_data_dir }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_data_dir }}/data", owner: "999", group: "{{ deploy_user | default('deploy') }}", mode: "0750" }
-        - { path: "/data/backups/postgres", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-
-    # 获取环境变量
-    - name: 获取 PostgreSQL 环境变量
-      command: >
-        aws ssm get-parameter
-        --name "/postgres/.env"
-        --with-decryption
-        --output text
-        --query 'Parameter.Value'
-        --region {{ aws_region | default('us-west-2') }}
-      register: postgres_env_result
-      changed_when: false
-      failed_when: postgres_env_result.rc != 0
-      delegate_to: localhost
-      become: false
-
-    # 生成配置文件
-    - name: 生成 Docker Compose 配置
-      template:
-        src: "{{ playbook_dir }}/../../infra-apps/postgres/docker-compose.yml.j2"
-        dest: "{{ service_config_dir }}/docker-compose.yml"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0644'
-
-    - name: 创建环境变量文件
-      copy:
-        content: |
-          # PostgreSQL 环境变量
-          {{ postgres_env_result.stdout }}
-        dest: "{{ service_config_dir }}/.env"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0600'
-      no_log: true
-
-    - name: 复制初始化脚本
-      copy:
-        src: "{{ playbook_dir }}/../../infra-apps/postgres/init/"
-        dest: "{{ service_config_dir }}/init/"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0644'
-
-    # 启动服务
-    - name: 启动 PostgreSQL 服务
-      community.docker.docker_compose_v2:
-        project_src: "{{ service_config_dir }}"
-        state: present
-        pull: always
-      become_user: "{{ deploy_user | default('deploy') }}"
-
-    # 验证服务
-    - name: 等待 PostgreSQL 就绪
-      wait_for:
-        port: 5432
-        host: 127.0.0.1
-        timeout: 60
-
-    - name: 验证 PostgreSQL 健康状态
-      command: docker compose exec -T postgres pg_isready -U postgres
-      args:
-        chdir: "{{ service_config_dir }}"
-      register: postgres_health
-      changed_when: false
-      become_user: "{{ deploy_user | default('deploy') }}"
+    - name: 部署 PostgreSQL 服务
+      script: "{{ playbook_dir }}/../../infra-apps/postgres/deploy.sh"
+      environment:
+        ENV_MODE: aws
+        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
+        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
+      register: postgres_deploy_result
 
     - name: 显示部署结果
       debug:
-        msg:
-          - "✅ PostgreSQL 部署完成"
-          - "配置目录: {{ service_config_dir }}"
-          - "数据目录: {{ service_data_dir }}"
-          - "管理命令: cd {{ service_config_dir }} && docker compose"
-          - "查看日志: cd {{ service_config_dir }} && docker compose logs postgres"
+        var: postgres_deploy_result.stdout_lines

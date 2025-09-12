@@ -1,21 +1,19 @@
 # =====================================
-# Redis 独立服务
-# 自包含配置，最小依赖
+# Redis 本地开发配置
 # =====================================
-
 services:
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     
-    # Redis 配置（直接写在 command 中）
+    # Redis 本地开发配置（简化配置，较小内存占用）
     command: >
       redis-server
       --appendonly yes
       --appendfsync everysec
-      --maxmemory 512mb
+      --maxmemory 128mb
       --maxmemory-policy allkeys-lru
-      --requirepass ${REDIS_PASSWORD}
+      --requirepass ${REDIS_PASSWORD:-local_redis_password_123}
       --tcp-keepalive 60
       --timeout 300
       --databases 16
@@ -23,38 +21,33 @@ services:
       --rdbcompression yes
       --rdbchecksum yes
       --loglevel notice
+      --logfile ""
     
-    # 环境变量文件
+    # 引用 .env 文件
     env_file:
       - .env
     
     volumes:
-      # 数据持久化到 /data
-      - /data/redis/data:/data
+      # 本地数据目录
+      - ./data:/data
+      
+      # 本地配置目录（如果需要自定义配置文件）
+      - ./conf:/usr/local/etc/redis:ro
     
     ports:
-      - "127.0.0.1:6379:6379"
+      # 本地开发暴露端口方便连接
+      - "6379:6379"
     
     networks:
       - shared_network
     
     # 健康检查
     healthcheck:
-      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-local_redis_password_123}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
-    
-    # 资源限制
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '1.0'
-        reservations:
-          memory: 256M
-          cpus: '0.5'
     
     # 日志配置
     logging:
@@ -70,11 +63,6 @@ services:
     # 用户配置（非 root 运行）
     user: "999:999"
 
-
-# =====================================
-# 共享网络
-# =====================================
 networks:
   shared_network:
     external: true
-

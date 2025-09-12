@@ -1,7 +1,7 @@
 ---
 # =====================================
 # 通用基础设施服务部署
-# 统一处理 postgres, redis, caddy, database-tasks 等
+# 使用统一部署脚本
 # =====================================
 - name: Deploy Infrastructure Service
   hosts: all
@@ -9,237 +9,34 @@
   become: yes
   
   vars:
-    service_name: "{{ service }}"  # 必须参数：服务名 (postgres, redis, caddy, database-tasks)
-    service_config_dir: "/srv/{{ service_name }}"
-    service_data_dir: "/data/{{ service_name }}"
-    infra_apps_dir: "{{ playbook_dir }}/../../infra-apps"
+    service_name: "{{ service }}"  # 必须参数：服务名 (postgres, redis, caddy, database-tasks, app)
     
   tasks:
     - name: 验证服务名称
       fail:
-        msg: "请指定服务名称: --extra-vars service=postgres|redis|caddy|database-tasks"
+        msg: "请指定服务名称: --extra-vars service=postgres|redis|caddy|database-tasks|app"
       when: service_name is not defined
       
-    - name: 验证服务配置存在
+    - name: 验证服务部署脚本存在
       local_action:
         module: stat
-        path: "{{ infra_apps_dir }}/{{ service_name }}"
-      register: service_config_stat
+        path: "{{ playbook_dir }}/../../infra-apps/{{ service_name }}/deploy.sh"
+      register: deploy_script_stat
       become: false
       
-    - name: 服务配置不存在时失败
+    - name: 服务部署脚本不存在时失败
       fail:
-        msg: "服务配置不存在: {{ infra_apps_dir }}/{{ service_name }}"
-      when: not service_config_stat.stat.exists
-      
-    - name: 显示部署信息
-      debug:
-        msg:
-          - "部署基础设施服务: {{ service_name }}"
-          - "配置源: {{ infra_apps_dir }}/{{ service_name }}"
-          - "部署目标: {{ service_config_dir }}"
-          - "数据目录: {{ service_data_dir }}"
-      tags: [info]
+        msg: "服务 {{ service_name }} 的部署脚本不存在: infra-apps/{{ service_name }}/deploy.sh"
+      when: not deploy_script_stat.stat.exists
 
-    # 创建目录结构
-    - name: 创建服务目录
-      file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "{{ item.mode }}"
-      loop:
-        # 服务配置目录
-        - { path: "{{ service_config_dir }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        # 数据目录（根据服务类型设置权限）
-        - { path: "{{ service_data_dir }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        # 备份目录
-        - { path: "/data/backups/{{ service_name }}", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-      tags: [setup]
-
-    # 特殊目录处理
-    - name: 创建 PostgreSQL 特殊目录
-      file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - { path: "{{ service_config_dir }}/init", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_data_dir }}/data", owner: "999", group: "{{ deploy_user | default('deploy') }}", mode: "0750" }
-      when: service_name == 'postgres'
-      tags: [setup]
-
-    - name: 创建 Redis 特殊目录
-      file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - { path: "{{ service_data_dir }}/data", owner: "999", group: "{{ deploy_user | default('deploy') }}", mode: "0750" }
-      when: service_name == 'redis'
-      tags: [setup]
-
-    - name: 创建 Caddy 特殊目录
-      file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - { path: "{{ service_data_dir }}/data", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_data_dir }}/config", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_data_dir }}/logs", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-      when: service_name == 'caddy'
-      tags: [setup]
-
-    - name: 创建 Database Tasks 特殊目录
-      file:
-        path: "{{ item.path }}"
-        state: directory
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - { path: "{{ service_config_dir }}/tasks", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-        - { path: "{{ service_data_dir }}/logs", owner: "{{ deploy_user | default('deploy') }}", group: "{{ deploy_user | default('deploy') }}", mode: "0755" }
-      when: service_name == 'database-tasks'
-      tags: [setup]
-
-    # 获取服务配置
-    - name: 获取服务环境变量
-      command: >
-        aws ssm get-parameter
-        --name "/{{ service_name }}/.env"
-        --with-decryption
-        --output text
-        --query 'Parameter.Value'
-        --region {{ aws_region | default('us-west-2') }}
-      register: service_env_result
-      changed_when: false
-      failed_when: service_env_result.rc != 0
-      delegate_to: localhost
-      become: false
-      tags: [secrets]
-
-    # 处理配置文件
-    - name: 复制并处理 Docker Compose 配置
-      template:
-        src: "{{ infra_apps_dir }}/{{ service_name }}/docker-compose.yml.j2"
-        dest: "{{ service_config_dir }}/docker-compose.yml"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0644'
-      tags: [config]
-
-    - name: 创建环境变量文件
-      copy:
-        content: |
-          # {{ service_name | upper }} 环境变量
-          {{ service_env_result.stdout }}
-        dest: "{{ service_config_dir }}/.env"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0600'
-      no_log: true
-      tags: [secrets]
-
-    # 复制额外配置文件
-    - name: 复制 PostgreSQL 初始化脚本
-      copy:
-        src: "{{ infra_apps_dir }}/{{ service_name }}/init/"
-        dest: "{{ service_config_dir }}/init/"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0644'
-      when: service_name == 'postgres'
-      tags: [config]
-
-    - name: 复制并处理 Caddyfile
-      template:
-        src: "{{ infra_apps_dir }}/{{ service_name }}/Caddyfile.j2"
-        dest: "{{ service_config_dir }}/Caddyfile"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0644'
-      when: service_name == 'caddy'
-      tags: [config]
-
-    - name: 复制数据库任务模板
-      copy:
-        src: "{{ infra_apps_dir }}/{{ service_name }}/tasks/"
-        dest: "{{ service_config_dir }}/tasks/"
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0644'
-      when: service_name == 'database-tasks'
-      tags: [config]
-
-    # 部署服务
-    - name: 启动服务
-      community.docker.docker_compose_v2:
-        project_src: "{{ service_config_dir }}"
-        state: present
-        pull: always
-      become_user: "{{ deploy_user | default('deploy') }}"
-      when: service_name != 'database-tasks'  # database-tasks 不自动启动
-      tags: [deploy]
-
-    # 服务验证
-    - name: 等待服务就绪 - PostgreSQL
-      wait_for:
-        port: 5432
-        host: 127.0.0.1
-        timeout: 60
-      when: service_name == 'postgres'
-      tags: [verify]
-
-    - name: 等待服务就绪 - Redis
-      wait_for:
-        port: 6379
-        host: 127.0.0.1
-        timeout: 60
-      when: service_name == 'redis'
-      tags: [verify]
-
-    - name: 等待服务就绪 - Caddy
-      wait_for:
-        port: 80
-        host: 0.0.0.0
-        timeout: 60
-      when: service_name == 'caddy'
-      tags: [verify]
-
-    - name: 验证服务健康状态
-      command: docker compose exec -T {{ service_name }} {{ item }}
-      args:
-        chdir: "{{ service_config_dir }}"
-      register: service_health
-      changed_when: false
-      become_user: "{{ deploy_user | default('deploy') }}"
-      with_items:
-        - "{{ health_check_commands[service_name] | default(['echo \"No health check defined\"']) }}"
-      when: service_name != 'database-tasks'
-      tags: [verify]
-
-  vars:
-    health_check_commands:
-      postgres: ["pg_isready -U postgres"]
-      redis: ["redis-cli --no-auth-warning -a ${REDIS_PASSWORD} ping"]
-      caddy: ["caddy version"]
+    - name: 部署基础设施服务
+      script: "{{ playbook_dir }}/../../infra-apps/{{ service_name }}/deploy.sh"
+      environment:
+        ENV_MODE: aws
+        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
+        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
+      register: service_deploy_result
 
     - name: 显示部署结果
       debug:
-        msg:
-          - "✅ {{ service_name | upper }} 部署完成"
-          - "配置目录: {{ service_config_dir }}"
-          - "数据目录: {{ service_data_dir }}"
-          - "管理命令: cd {{ service_config_dir }} && docker compose"
-          - "查看日志: cd {{ service_config_dir }} && docker compose logs {{ service_name }}"
-      tags: [info]
-
+        var: service_deploy_result.stdout_lines

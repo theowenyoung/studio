@@ -1,0 +1,53 @@
+# =====================================
+# Database Tasks 生产环境配置
+# 用于执行数据库管理任务
+# =====================================
+services:
+  db-task-runner:
+    image: postgres:17-alpine
+    working_dir: /tasks
+    
+    environment:
+      # 连接到生产 PostgreSQL
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      
+      # 日志设置
+      - PGLOGFILE=/logs/task-execution.log
+    
+    # 环境变量文件（敏感信息）
+    env_file:
+      - .env
+    
+    volumes:
+      # 任务脚本目录（只读）
+      - ./tasks:/tasks:ro
+      
+      # 生产日志目录
+      - /data/database-tasks/logs:/logs
+      
+      # 生产备份目录
+      - /data/backups/database-tasks:/backups
+    
+    networks:
+      - shared_network
+    
+    profiles:
+      # 只在需要时启动（不是默认启动的服务）
+      - task
+    
+    # 保持容器运行，等待执行任务
+    command: tail -f /dev/null
+    
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    
+    # 用户配置（非 root 运行）
+    user: "999:999"
+
+networks:
+  shared_network:
+    external: true

@@ -1,0 +1,47 @@
+# =====================================
+# Caddy 生产环境配置
+# =====================================
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+      - "127.0.0.1:2019:2019"  # Admin API
+    
+    volumes:
+      # 生产配置文件（由 deploy.sh 生成）
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      
+      # 生产数据目录
+      - /data/caddy/data:/data
+      - /data/caddy/config:/config
+      - /data/caddy/logs:/var/log/caddy
+    
+    networks:
+      - shared_network
+    
+    # 环境变量文件（仅敏感信息）
+    env_file:
+      - .env
+    
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  shared_network:
+    external: true

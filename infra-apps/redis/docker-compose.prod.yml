@@ -1,0 +1,77 @@
+# =====================================
+# Redis 生产环境配置
+# =====================================
+services:
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    
+    # Redis 生产配置（高性能配置）
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+      --tcp-keepalive 60
+      --timeout 300
+      --databases 16
+      --save 900 1 --save 300 10 --save 60 10000
+      --rdbcompression yes
+      --rdbchecksum yes
+      --loglevel notice
+      --logfile /var/log/redis/redis-server.log
+      --syslog-enabled yes
+      --syslog-ident redis
+      --stop-writes-on-bgsave-error yes
+      --rdbcompression yes
+      --dbfilename dump.rdb
+      --dir /data
+    
+    # 环境变量文件（仅敏感信息）
+    env_file:
+      - .env
+    
+    volumes:
+      # 生产数据目录
+      - /data/redis/data:/data
+      
+      # 生产日志目录
+      - /data/redis/logs:/var/log/redis
+      
+      # 生产配置目录（如果需要）
+      - ./conf:/usr/local/etc/redis:ro
+    
+    # 生产环境不暴露端口（仅内部访问）
+    expose:
+      - "6379"
+    
+    networks:
+      - shared_network
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    
+    # 安全配置
+    security_opt:
+      - no-new-privileges:true
+    
+    # 用户配置（非 root 运行）
+    user: "999:999"
+
+networks:
+  shared_network:
+    external: true

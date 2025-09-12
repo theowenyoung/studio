@@ -1,0 +1,83 @@
+# =====================================
+# PostgreSQL 本地开发配置
+# =====================================
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    
+    environment:
+      # 核心配置
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      
+      # 性能配置
+      POSTGRES_SHARED_PRELOAD_LIBRARIES: 'pg_stat_statements'
+      
+      # 本地化
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+    
+    # 引用 .env 文件
+    env_file:
+      - .env
+    
+    ports:
+      # 本地开发暴露端口方便连接
+      - "5432:5432"
+    
+    volumes:
+      # 本地数据目录
+      - ./data:/var/lib/postgresql/data
+      
+      # 初始化脚本
+      - ./init:/docker-entrypoint-initdb.d:ro
+      
+      # 本地备份目录
+      - ./backups:/backups
+    
+    networks:
+      - shared_network
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    # 本地开发性能配置（较小配置适合本地）
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c work_mem=4MB
+      -c min_wal_size=512MB
+      -c max_wal_size=2GB
+      -c max_connections=100
+      -c log_min_duration_statement=2000
+      -c log_checkpoints=on
+      -c log_connections=on
+      -c log_disconnections=on
+      -c shared_preload_libraries=pg_stat_statements
+      -c log_destination=stderr
+      -c logging_collector=off
+    
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  shared_network:
+    external: true

@@ -2,6 +2,20 @@
 
 A unified monorepo containing all my public projects, experiments, and deployments. Everything I build, in one place.
 
+
+
+## 本地开发
+
+
+```
+# brew 安装 mkcert 本地证书管理工具，然后安装
+
+mkcert -install
+make setup-local
+```
+
+
+
 ## Quickstart
 
 

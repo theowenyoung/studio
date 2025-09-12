@@ -1,0 +1,120 @@
+# =====================================
+# Caddy 本地开发配置
+# 直接硬编码域名，无需环境变量
+# =====================================
+
+{
+    # 本地开发配置 - 使用 mkcert 证书
+    local_certs
+    auto_https off
+}
+
+# 主应用
+app.localhost {
+    # 健康检查端点
+    handle /health {
+        respond "OK" 200
+        header Content-Type "text/plain"
+    }
+    
+    # API 路由
+    handle /api/* {
+        reverse_proxy app:3000 {
+            header_up Host {http.request.host}
+            header_up X-Real-IP {http.request.remote.host}
+            header_up X-Forwarded-For {http.request.remote.host}
+            header_up X-Forwarded-Proto {http.request.scheme}
+        }
+    }
+    
+    # 静态文件服务
+    handle /static/* {
+        root * /data/uploads
+        file_server browse
+    }
+    
+    # 上传文件服务
+    handle /uploads/* {
+        root * /data
+        file_server browse
+    }
+    
+    # 默认应用路由
+    handle {
+        reverse_proxy app:3000 {
+            header_up Host {http.request.host}
+            header_up X-Real-IP {http.request.remote.host}
+            header_up X-Forwarded-For {http.request.remote.host}
+            header_up X-Forwarded-Proto {http.request.scheme}
+        }
+    }
+    
+    # 使用 mkcert 生成的证书
+    tls /certs/localhost+5.pem /certs/localhost+5-key.pem
+    
+    # 访问日志
+    log {
+        output file /var/log/caddy/app-access.log
+        format json
+        level INFO
+    }
+}
+
+# 管理后台应用
+admin.localhost {
+    reverse_proxy admin-app:3001 {
+        header_up Host {http.request.host}
+        header_up X-Real-IP {http.request.remote.host}
+        header_up X-Forwarded-For {http.request.remote.host}
+        header_up X-Forwarded-Proto {http.request.scheme}
+    }
+    
+    tls internal
+    
+    log {
+        output file /var/log/caddy/admin-access.log
+        format json
+        level INFO
+    }
+}
+
+# API 服务
+api.localhost {
+    reverse_proxy api-service:8080 {
+        header_up Host {http.request.host}
+        header_up X-Real-IP {http.request.remote.host}
+        header_up X-Forwarded-For {http.request.remote.host}
+        header_up X-Forwarded-Proto {http.request.scheme}
+    }
+    
+    tls internal
+    
+    log {
+        output file /var/log/caddy/api-access.log
+        format json
+        level INFO
+    }
+}
+
+# 数据库管理工具
+db.localhost {
+    reverse_proxy pgadmin:80 {
+        header_up Host {http.request.host}
+        header_up X-Real-IP {http.request.remote.host}
+        header_up X-Forwarded-For {http.request.remote.host}
+        header_up X-Forwarded-Proto {http.request.scheme}
+    }
+    
+    tls internal
+    
+    log {
+        output file /var/log/caddy/db-access.log
+        format json
+        level INFO
+    }
+}
+
+# HTTP 重定向到 HTTPS
+app.localhost:80, admin.localhost:80, api.localhost:80, db.localhost:80 {
+    redir https://{host}{uri} permanent
+}

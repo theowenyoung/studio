@@ -1,8 +1,6 @@
 # =====================================
-# PostgreSQL 独立服务
-# 自包含配置，最小依赖
+# PostgreSQL 生产环境配置
 # =====================================
-
 services:
   postgres:
     image: postgres:17-alpine
@@ -21,19 +19,26 @@ services:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
     
-    # 环境变量文件
-    env_file:
-      - .env
+    # 生产环境不暴露端口（仅内部访问）
+    expose:
+      - "5432"
     
     volumes:
-      # 数据持久化到 /data（纯数据目录）
+      # 生产数据目录
       - /data/postgres/data:/var/lib/postgresql/data
       
-      # 初始化脚本（来自配置目录）
-      - /srv/postgres/init:/docker-entrypoint-initdb.d:ro
+      # 初始化脚本
+      - ./init:/docker-entrypoint-initdb.d:ro
+      
+      # 生产备份目录
+      - /data/backups/postgres:/backups
     
     networks:
       - shared_network
+    
+    # 环境变量文件（仅敏感信息）
+    env_file:
+      - .env
     
     # 健康检查
     healthcheck:
@@ -43,12 +48,12 @@ services:
       retries: 5
       start_period: 30s
     
-    # 性能优化配置（直接写在 command 中）
+    # 生产环境性能配置（高性能配置）
     command: >
       postgres
-      -c shared_buffers=512MB
-      -c effective_cache_size=2GB
-      -c maintenance_work_mem=128MB
+      -c shared_buffers=1GB
+      -c effective_cache_size=4GB
+      -c maintenance_work_mem=256MB
       -c checkpoint_completion_target=0.9
       -c wal_buffers=32MB
       -c default_statistics_target=100
@@ -63,19 +68,21 @@ services:
       -c log_connections=on
       -c log_disconnections=on
       -c shared_preload_libraries=pg_stat_statements
+      -c log_destination=stderr
+      -c logging_collector=on
+      -c log_directory=/var/log/postgresql
+      -c log_filename=postgresql-%Y-%m-%d_%H%M%S.log
+      -c log_rotation_age=1d
+      -c log_rotation_size=1GB
+      -c log_truncate_on_rotation=on
     
     # 日志配置
     logging:
       driver: json-file
       options:
         max-size: "10m"
-        max-file: "3"
+        max-file: "5"
 
-
-# =====================================
-# 共享网络
-# =====================================
 networks:
   shared_network:
     external: true
-

@@ -68,51 +68,190 @@ description = "初始化服务器（无密码）"
 run = "ansible-playbook ansible/playbooks/infra.yml"
 
 # ===============================================
-# 基础设施部署
+# 本地开发环境
+# ===============================================
+
+[tasks.setup-local]
+description = "一键设置本地开发环境（包含 mkcert）"
+run = """
+echo "🚀 设置本地开发环境..."
+
+# 安装 mkcert（如果未安装）
+if ! command -v mkcert &> /dev/null; then
+  echo "📦 安装 mkcert..."
+  if [[ "$OSTYPE" == "darwin"* ]] && command -v brew &> /dev/null; then
+    brew install mkcert
+  else
+    echo "❌ 请手动安装 mkcert:"
+    echo "  macOS: brew install mkcert"
+    echo "  Linux: https://github.com/FiloSottile/mkcert#installation"
+    exit 1
+  fi
+fi
+
+mkcert -install
+
+cd infra-apps/caddy/certs
+mkcert localhost app.localhost
+"""
+
+
+[tasks.service]
+description = "启动完整本地开发环境"
+run = """
+echo "🚀 启动本地开发环境..."
+
+# 创建共享网络（如果不存在）
+if ! docker network ls | grep -q "shared_network"; then
+  echo "📡 创建共享网络..."
+  docker network create shared_network
+fi
+
+# 启动基础设施服务
+echo "💾 启动基础设施服务..."
+cd infra-apps/postgres && docker compose up -d
+cd ../redis && docker compose up -d  
+cd ../caddy && docker compose up -d
+"""
+
+[tasks.down]
+description = "停止本地开发环境"
+run = """
+echo "🛑 停止本地开发环境..."
+cd infra-apps/caddy && docker compose down
+cd ../redis && docker compose down  
+cd ../postgres && docker compose down
+echo "✅ 本地开发环境已停止"
+"""
+
+[tasks.restart]
+description = "重启本地开发环境"
+run = """
+mise down
+sleep 2
+mise service
+"""
+
+[tasks.status]
+description = "查看本地服务状态"
+run = """
+echo "📊 本地服务状态:"
+echo ""
+echo "🐳 Docker 容器:"
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "(postgres|redis|caddy|app|admin|api)"
+echo ""
+echo "🌐 网络连接:"
+docker network inspect shared_network --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null || echo "shared_network 不存在"
+"""
+
+[tasks.logs]
+description = "查看服务日志"
+run = """
+SERVICE={{arg(name='service', default='app')}}
+echo "📜 查看 $SERVICE 服务日志..."
+case $SERVICE in
+  postgres) cd infra-apps/postgres && docker compose logs -f ;;
+  redis) cd infra-apps/redis && docker compose logs -f ;;
+  caddy) cd infra-apps/caddy && docker compose logs -f ;;
+  *) echo "❌ 未知服务: $SERVICE" && echo "可用服务: postgres, redis, caddy, app, admin-app, api-service" ;;
+esac
+"""
+
+# ===============================================
+# 单独服务管理
+# ===============================================
+
+[tasks.dev-postgres]
+description = "启动本地 PostgreSQL"
+run = "cd infra-apps/postgres && ENV_MODE=local ./deploy.sh"
+
+[tasks.dev-redis]
+description = "启动本地 Redis"
+run = "cd infra-apps/redis && ENV_MODE=local ./deploy.sh"
+
+[tasks.dev-caddy]
+description = "启动本地 Caddy"
+run = "cd infra-apps/caddy && ENV_MODE=local ./deploy.sh"
+
+# ===============================================
+# 数据库任务管理
+# ===============================================
+
+[tasks.db-task]
+description = "执行数据库任务"
+run = """
+TASK_FILE={{arg(name='task_file')}}
+if [ -z "$TASK_FILE" ]; then
+  echo "请指定任务文件名"
+  echo "用法: mise db-task task_file=<文件名>"
+  exit 1
+fi
+cd infra-apps/database-tasks && ENV_MODE=local ./deploy.sh run $TASK_FILE
+"""
+
+[tasks.db-list]
+description = "列出可用的数据库任务"
+run = "cd infra-apps/database-tasks && ENV_MODE=local ./deploy.sh list"
+
+# ===============================================
+# 生产环境部署
+# ===============================================
+
+[tasks.deploy-postgres]
+description = "部署 PostgreSQL 到生产环境"
+run = "cd infra-apps/postgres && ENV_MODE=aws ./deploy.sh"
+
+[tasks.deploy-redis]
+description = "部署 Redis 到生产环境"
+run = "cd infra-apps/redis && ENV_MODE=aws ./deploy.sh"
+
+[tasks.deploy-caddy]
+description = "部署 Caddy 到生产环境"
+run = "cd infra-apps/caddy && ENV_MODE=aws ./deploy.sh"
+
+[tasks.deploy-app]
+description = "部署应用到生产环境"
+run = "cd infra-apps/app && ENV_MODE=aws ./deploy.sh"
+
+[tasks.deploy-all]
+description = "部署所有服务到生产环境"
+run = """
+echo "🚀 开始完整生产环境部署..."
+
+echo "📊 部署基础设施..."
+mise deploy-postgres
+mise deploy-redis
+mise deploy-caddy
+
+echo "🚀 部署应用..."
+mise deploy-app
+
+echo "✅ 生产环境部署完成！"
+"""
+
+# ===============================================
+# Ansible 兼容任务（向后兼容）
 # ===============================================
 
 [tasks.postgres]
-description = "部署 PostgreSQL"
+description = "部署 PostgreSQL (Ansible)"
 run = "ansible-playbook ansible/playbooks/deploy-postgres-infra.yml"
 
 [tasks.redis]
-description = "部署 Redis"
+description = "部署 Redis (Ansible)"
 run = "ansible-playbook ansible/playbooks/deploy-redis-infra.yml"
 
 [tasks.caddy]
-description = "部署 Caddy"
+description = "部署 Caddy (Ansible)"
 run = "ansible-playbook ansible/playbooks/deploy-caddy-infra.yml"
 
-
-[tasks.deploy-app]
-description = "部署应用"
-run = "ansible-playbook ansible/playbooks/deploy-app-standalone.yml --extra-vars app_name={{arg(name='app_name')}}"
-
-# ===============================================
-# 环境变量同步
-# ===============================================
-
-[tasks.env]
-description = "同步开发环境变量"
-run = """
-PROJECT=$(basename "$PWD")
-aws ssm get-parameter --name "/$PROJECT/.env" --with-decryption --query 'Parameter.Value' --output text > .env
-echo "开发环境已同步到 .env"
-"""
-
-[tasks.prod]
-description = "同步生产环境变量"
-run = """
-PROJECT=$(basename "$PWD")
-aws ssm get-parameter --name "/$PROJECT/.env.prod" --with-decryption --query 'Parameter.Value' --output text > .env.prod  
-echo "生产环境已同步到 .env.prod"
-"""
-
-
 [tasks.run-db-task]  
-description = "执行数据库任务"
+description = "执行数据库任务 (Ansible)"
 run = """
+TASK_FILE={{arg(name='task_file')}}
 ansible-playbook ansible/playbooks/deploy-database-tasks-infra.yml \
-  --extra-vars "task_name={{arg(name='task_file')}}"
+  --extra-vars "task_name=$TASK_FILE"
 """
+
+
 

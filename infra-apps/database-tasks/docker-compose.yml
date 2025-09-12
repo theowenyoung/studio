@@ -1,0 +1,46 @@
+# =====================================
+# Database Tasks 本地开发配置
+# 用于执行数据库管理任务
+# =====================================
+services:
+  db-task-runner:
+    image: postgres:17-alpine
+    working_dir: /tasks
+    
+    environment:
+      # 连接到本地 PostgreSQL
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=postgres
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      
+      # 日志设置
+      - PGLOGFILE=/logs/task-execution.log
+    
+    # 引用 .env 文件
+    env_file:
+      - .env
+    
+    volumes:
+      # 任务脚本目录（只读）
+      - ./tasks:/tasks:ro
+      
+      # 本地日志目录
+      - ./logs:/logs
+      
+      # 本地备份目录（如果需要）
+      - ./backups:/backups
+    
+    networks:
+      - shared_network
+    
+    profiles:
+      # 只在需要时启动（不是默认启动的服务）
+      - task
+    
+    # 保持容器运行，等待执行任务
+    command: tail -f /dev/null
+
+networks:
+  shared_network:
+    external: true
