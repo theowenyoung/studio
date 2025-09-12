@@ -10,6 +10,7 @@ base_domain: "owenyoung.com"
 deploy_ssh_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINAPcRy9wGjP47bHpv2RcNO3yw3udCcTlgWs22KLcpUW main@example.com"
 
+docker_services_base_dir: "/data"
 
 # 基础必装包
 common_packages:

@@ -1,0 +1,196 @@
+#!/bin/bash
+# =====================================
+# Docker Rollout 零停机部署示例脚本
+# 生成时间: {{ ansible_date_time.iso8601 }}
+# 部署用户: {{ deploy_user | default('deploy') }}
+# =====================================
+
+set -euo pipefail
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# 配置变量
+SERVICES_DIR="{{ docker_services_base_dir | default('/opt/services') }}"
+DEFAULT_TIMEOUT=60
+DEFAULT_COMPOSE_FILE="docker-compose.yml"
+
+# 日志函数
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# 显示帮助信息
+show_help() {
+    cat << 'EOF'
+Docker Rollout 零停机部署示例脚本
+
+用法:
+    ./rollout-example.sh <service-name> [options]
+
+参数:
+    service-name    要部署的服务名称 (必需)
+
+选项:
+    -f, --file      Docker Compose 文件路径 (默认: docker-compose.yml)
+    -t, --timeout   超时时间(秒) (默认: 60)
+    -h, --help      显示此帮助信息
+
+示例:
+    # 部署 web 服务
+    ./rollout-example.sh web
+    
+    # 指定 compose 文件和超时时间
+    ./rollout-example.sh api -f docker-compose.prod.yml -t 120
+    
+    # 部署数据库服务
+    ./rollout-example.sh postgres -t 180
+
+常用服务部署命令:
+    # Web 应用
+    docker rollout web
+    
+    # API 服务  
+    docker rollout api
+    
+    # 数据库 (需要更长超时时间)
+    docker rollout -f docker-compose.yml --timeout 180 postgres
+    
+    # Redis 缓存
+    docker rollout redis
+    
+    # Nginx 反向代理
+    docker rollout nginx
+
+EOF
+}
+
+# 检查 docker-rollout 是否安装
+check_docker_rollout() {
+    if ! command -v docker &> /dev/null; then
+        log_error "Docker 未安装或不在 PATH 中"
+        exit 1
+    fi
+    
+    if ! docker rollout --help &> /dev/null; then
+        log_error "docker-rollout 插件未安装"
+        log_info "请运行 Ansible playbook 安装 docker-rollout"
+        exit 1
+    fi
+}
+
+# 检查服务是否存在
+check_service_exists() {
+    local service_name="$1"
+    local compose_file="$2"
+    
+    if ! docker-compose -f "$compose_file" config --services | grep -q "^${service_name}$"; then
+        log_error "服务 '${service_name}' 在 ${compose_file} 中不存在"
+        log_info "可用服务列表:"
+        docker-compose -f "$compose_file" config --services | sed 's/^/  - /'
+        exit 1
+    fi
+}
+
+# 执行零停机部署
+perform_rollout() {
+    local service_name="$1"
+    local compose_file="$2"
+    local timeout="$3"
+    
+    log_info "开始零停机部署..."
+    log_info "服务: ${service_name}"
+    log_info "Compose 文件: ${compose_file}"
+    log_info "超时时间: ${timeout}s"
+    
+    # 执行部署
+    if docker rollout -f "$compose_file" --timeout "$timeout" "$service_name"; then
+        log_success "服务 '${service_name}' 零停机部署成功！"
+        
+        # 显示部署后状态
+        log_info "部署后状态:"
+        docker-compose -f "$compose_file" ps "$service_name"
+    else
+        log_error "服务 '${service_name}' 部署失败"
+        exit 1
+    fi
+}
+
+# 主函数
+main() {
+    local service_name=""
+    local compose_file="$DEFAULT_COMPOSE_FILE"
+    local timeout="$DEFAULT_TIMEOUT"
+    
+    # 解析命令行参数
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -f|--file)
+                compose_file="$2"
+                shift 2
+                ;;
+            -t|--timeout)
+                timeout="$2"
+                shift 2
+                ;;
+            -*)
+                log_error "未知选项: $1"
+                show_help
+                exit 1
+                ;;
+            *)
+                if [[ -z "$service_name" ]]; then
+                    service_name="$1"
+                else
+                    log_error "过多的参数: $1"
+                    show_help
+                    exit 1
+                fi
+                shift
+                ;;
+        esac
+    done
+    
+    # 检查必需参数
+    if [[ -z "$service_name" ]]; then
+        log_error "缺少服务名称参数"
+        show_help
+        exit 1
+    fi
+    
+    # 检查 compose 文件是否存在
+    if [[ ! -f "$compose_file" ]]; then
+        log_error "Docker Compose 文件 '$compose_file' 不存在"
+        exit 1
+    fi
+    
+    # 执行检查和部署
+    check_docker_rollout
+    check_service_exists "$service_name" "$compose_file"
+    perform_rollout "$service_name" "$compose_file" "$timeout"
+}
+
+# 脚本入口
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

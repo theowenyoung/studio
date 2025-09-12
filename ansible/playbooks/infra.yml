@@ -11,6 +11,7 @@
 - import_playbook: bootstrap.yml
 - import_playbook: security.yml
 - import_playbook: mount.yml
+- import_playbook: setup-docker.yml
 
 # =====================================
 # Docker 环境和工具准备
@@ -21,31 +22,6 @@
   become: yes
   
   tasks:
-    - name: Ensure Docker daemon is running
-      systemd:
-        name: docker
-        state: started
-        enabled: yes
-
-    # =====================================
-    # 创建共享网络
-    # =====================================
-    - name: Create shared Docker network for all services
-      community.docker.docker_network:
-        name: shared_network
-        driver: bridge
-        ipam_config:
-          - subnet: "172.30.0.0/16"
-      become_user: "{{ deploy_user | default('deploy') }}"
-      tags: [network]
-
-    # =====================================
-    # 安装 docker-rollout 零停机部署工具
-    # =====================================
-    - name: Install docker-rollout for zero-downtime deployment
-      include_tasks: ../tasks/install-docker-rollout.yml
-      tags: [docker-rollout, tools]
-
     - name: 显示基础设施准备完成信息
       debug:
         msg:

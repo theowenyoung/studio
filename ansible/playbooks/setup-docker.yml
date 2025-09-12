@@ -1,0 +1,65 @@
+---
+- name: Setup Docker
+  hosts: all
+  gather_facts: yes
+  
+  pre_tasks:
+    - name: Include wait for connection
+      include_tasks: ../tasks/wait-for-connection.yml
+      tags: [always]
+  
+# =====================================
+# Docker 环境和工具准备
+# =====================================
+- name: Setup Docker Environment and Tools
+  hosts: all
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: Ensure Docker daemon is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+    
+    # 添加这个步骤：重启 Docker 确保 iptables 链正确
+    - name: Restart Docker to ensure iptables chains are properly set up
+      systemd:
+        name: docker
+        state: restarted
+      tags: [network, docker-restart]
+    
+    - name: Wait for Docker to be fully ready
+      pause:
+        seconds: 10
+      tags: [network]
+
+    - name: Create shared Docker network for all services
+      community.docker.docker_network:
+        name: shared_network
+        driver: bridge
+        ipam_config:
+          - subnet: "172.30.0.0/16"
+      become_user: "{{ deploy_user | default('deploy') }}"
+      tags: [network]
+
+    # =====================================
+    # 安装 docker-rollout 零停机部署工具
+    # =====================================
+    - name: Install docker-rollout for zero-downtime deployment
+      include_tasks: ../tasks/install-docker-rollout.yml
+      tags: [docker-rollout, tools]
+
+    - name: 显示基础设施准备完成信息
+      debug:
+        msg:
+          - "✅ Docker 基础设施准备完成"
+          - "共享网络: shared_network (172.30.0.0/16)"
+          - "零停机工具: docker rollout 已安装"
+          - ""
+          - "下一步: 部署独立服务（每个服务自动创建所需目录）"
+          - "  ansible-playbook -i inventory/production playbooks/deploy-postgres-standalone.yml"
+          - "  ansible-playbook -i inventory/production playbooks/deploy-redis-standalone.yml"
+          - "  ansible-playbook -i inventory/production playbooks/deploy-caddy-standalone.yml"
+      tags: [info]

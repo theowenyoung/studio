@@ -45,7 +45,7 @@
         --with-decryption
         --output text
         --query 'Parameter.Value'
-        --region {{ aws_region | default('us-east-1') }}
+        --region {{ aws_region | default('us-west-2') }}
       register: app_env_result
       changed_when: false
       failed_when: false

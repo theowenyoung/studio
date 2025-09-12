@@ -83,6 +83,15 @@
   when: docker_rollout_check.stat.exists
   tags: [docker-rollout, update]
 
+- name: 创建脚本目录
+  file:
+    path: "{{ docker_services_base_dir | default('/opt/services') }}/scripts"
+    state: directory
+    owner: "{{ deploy_user | default('deploy') }}"
+    group: "{{ deploy_user | default('deploy') }}"
+    mode: '0755'
+  tags: [docker-rollout, scripts]
+
 - name: 创建 docker-rollout 使用示例脚本
   template:
     src: docker-rollout-example.sh.j2
