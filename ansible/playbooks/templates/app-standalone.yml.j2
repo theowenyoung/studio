@@ -1,4 +1,3 @@
-version: '3.8'
 
 # =====================================
 # {{ app_name | upper }} 应用独立配置
@@ -8,7 +7,6 @@ version: '3.8'
 services:
   {{ app_name }}:
     image: "{{ app_name }}:latest"
-    container_name: {{ app_name }}
     restart: unless-stopped
     
     # 环境变量文件（从 AWS Parameter Store 获取）
