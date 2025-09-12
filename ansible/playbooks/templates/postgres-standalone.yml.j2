@@ -7,8 +7,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15-alpine
-    container_name: postgres
+    image: postgres:17-alpine
     restart: unless-stopped
     
     environment:
@@ -35,9 +34,6 @@ services:
       
       # 初始化脚本（可选）
       - /data/postgres/init:/docker-entrypoint-initdb.d:ro
-    
-    ports:
-      - "127.0.0.1:5432:5432"
     
     networks:
       - shared_network
@@ -70,16 +66,6 @@ services:
       -c log_connections=on
       -c log_disconnections=on
       -c shared_preload_libraries=pg_stat_statements
-    
-    # 资源限制
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '2.0'
-        reservations:
-          memory: 1G
-          cpus: '1.0'
     
     # 日志配置
     logging:

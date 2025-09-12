@@ -35,14 +35,14 @@
     - name: 获取 PostgreSQL 管理员密码
       command: >
         aws ssm get-parameter
-        --name "/postgres/.env"
+        --name "/postgres/.env.prod"
         --with-decryption
         --output text
         --query 'Parameter.Value'
         --region {{ aws_region | default('us-west-2') }}
       register: postgres_password_result
       changed_when: false
-      failed_when: false
+      failed_when: postgres_password_result.rc != 0
       become_user: "{{ deploy_user | default('deploy') }}"
       tags: [secrets]
 
@@ -50,12 +50,7 @@
       copy:
         content: |
           # PostgreSQL 环境变量
-          {% if postgres_password_result.rc == 0 %}
           {{ postgres_password_result.stdout }}
-          {% else %}
-          # 回退默认密码（请在生产环境中修改）
-          POSTGRES_PASSWORD=change-me-in-production
-          {% endif %}
         dest: /data/postgres/.env
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"
