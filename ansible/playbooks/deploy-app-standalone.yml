@@ -80,7 +80,7 @@
     # 生成独立的 docker-compose.yml
     - name: 生成应用 Docker Compose 配置
       template:
-        src: app-standalone.yml.j2
+        src: "{{ playbook_dir }}/../infra-apps/app/docker-compose.yml.j2"
         dest: /srv/{{ app_name }}/docker-compose.yml
         owner: "{{ deploy_user | default('deploy') }}"
         group: "{{ deploy_user | default('deploy') }}"

@@ -1,0 +1,12 @@
+# Caddy 环境变量模板
+# 部署时从 AWS Parameter Store 获取实际值
+
+# 管理员邮箱（用于 Let's Encrypt）
+ADMIN_EMAIL={{ admin_email }}
+
+# 域名配置（可选）
+# DOMAIN={{ domain_name }}
+
+# 其他 Caddy 配置
+# CADDY_LOG_LEVEL=INFO
+

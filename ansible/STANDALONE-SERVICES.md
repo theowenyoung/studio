@@ -68,9 +68,9 @@ ansible-playbook -i inventory/production playbooks/deploy-standalone-services.ym
 
 ```bash
 # 分别部署
-ansible-playbook -i inventory/production playbooks/deploy-postgres-standalone.yml
-ansible-playbook -i inventory/production playbooks/deploy-redis-standalone.yml
-ansible-playbook -i inventory/production playbooks/deploy-caddy-standalone.yml
+mise deploy-infra postgres
+mise deploy-infra redis
+mise deploy-infra caddy
 ```
 
 ### 3. 部署应用

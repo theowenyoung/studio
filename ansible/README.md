@@ -56,15 +56,19 @@ ansible/
 ├── playbooks/
 │   ├── infra.yml                      # 基础设施准备
 │   ├── deploy-standalone-services.yml # 独立服务批量部署
-│   ├── deploy-postgres-standalone.yml # PostgreSQL 独立部署
-│   ├── deploy-redis-standalone.yml    # Redis 独立部署
-│   ├── deploy-caddy-standalone.yml    # Caddy 独立部署
+│   ├── deploy-postgres-infra.yml      # PostgreSQL 基础设施部署
+│   ├── deploy-redis-infra.yml         # Redis 基础设施部署
+│   ├── deploy-caddy-infra.yml         # Caddy 基础设施部署
+│   ├── deploy-database-tasks-infra.yml # Database Tasks 基础设施部署
 │   └── deploy-app-standalone.yml      # 应用独立部署
 ├── templates/
-│   ├── *-standalone.yml.j2           # 各服务独立配置
-│   └── manage-standalone-secrets.sh.j2 # 密钥管理工具
+│   ├── manage-standalone-secrets.sh.j2 # 密钥管理工具
+│   └── docker-rollout-example.sh.j2   # 零停机部署示例
 ├── tasks/
-│   └── install-docker-rollout.yml     # 零停机部署工具
+│   ├── install-docker-rollout.yml     # 零停机部署工具
+│   ├── ssh-keyscan.yml                # SSH 密钥扫描
+│   ├── verify-services.yml            # 服务验证
+│   └── wait-for-connection.yml        # 连接等待
 └── STANDALONE-SERVICES.md             # 架构指南
 ```
 

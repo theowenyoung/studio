@@ -4,18 +4,16 @@ zig = "latest"
 bun = "latest"
 
 [env]
-# 默认环境变量，可以被命令行覆盖
-# 自动获取 AWS 账号 ID，拼出 ECR registry
+# AWS ECR registry
 ECR_REGISTRY = "912951144733.dkr.ecr.us-west-2.amazonaws.com"
 
 # ===============================================
-# 初始化任务 创建初始用户
+# 初始化任务
 # ===============================================
 
 [tasks.pre]
-description = "初始化新服务器 - 创建 deploy 用户, 用法: mise run pre <server_ip> [user]"
+description = "初始化新服务器"
 run = """
-echo "🚀 初始化服务器 {{arg(name="server_ip")}} (user={{arg(name="user", default="root")}})..."
 rsync -chazP ./scripts/create-init-user.sh {{arg(name="user", default="root")}}@{{arg(name="server_ip")}}:
 ssh {{arg(name="user", default="root")}}@{{arg(name="server_ip")}} 'bash create-init-user.sh'
 """
@@ -24,115 +22,104 @@ ssh {{arg(name="user", default="root")}}@{{arg(name="server_ip")}} 'bash create-
 description = "设置开发环境"
 run = "pip install -r requirements-dev.txt"
 
-
-
 [tasks.dev]
-description = "通过 Bun 运行 dev 应用， mise dev bun-hello, mise dev app-name"
-run = "bun run --filter={{arg(name='filter')}} dev"
-raw = true
+description = "运行开发应用"
+run = """
+cd js-apps/{{arg(name="app_name")}}
+bun run dev
+"""
 
 [tasks.build]
-description = "通过 Bun 运行 build 应用， mise build bun-hello, mise build app-name"
-run = "bun run --filter={{arg(name='filter')}} build"
-
-
-[tasks.docker-build]
-description = "构建并标记 Docker 镜像用于 ECR 推送, mise docker-build app-name"
+description = "构建应用"
 run = """
-docker build -f ./docker/bun/Dockerfile --platform linux/amd64 --target app -t {{arg(name='app')}} --build-arg APP={{arg(name='app')}} .
-docker tag {{arg(name='app')}} $ECR_REGISTRY/{{arg(name='app')}}:{{arg(name='tag', default='latest')}}
+cd js-apps/{{arg(name="app_name")}}
+bun run build
 """
 
-[tasks.docker-push]
-description = "推送 Docker 镜像到 ECR, mise docker-push app-name"
-depends = ["login-ecr"]
-run = "docker push $ECR_REGISTRY/{{arg(name='app')}}:{{arg(name='tag', default='latest')}}"
-
-[tasks.docker-deploy]
-description = "完整的构建和部署流程, mise docker-deploy app-name"
+[tasks.test]
+description = "运行测试"
 run = """
-# 登录 ECR
-aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
-
-# 构建镜像
-docker build -f ./docker/bun/Dockerfile --platform linux/amd64 --target app -t {{arg(name='app')}} --build-arg APP={{arg(name='app')}} .
-
-# 标记镜像
-docker tag {{arg(name='app')}} $ECR_REGISTRY/{{arg(name='app')}}:{{arg(name='tag', default='latest')}}
-
-# 推送镜像
-docker push $ECR_REGISTRY/{{arg(name='app')}}:{{arg(name='tag', default='latest')}}
+cd js-apps/{{arg(name="app_name")}}
+bun test
 """
 
-
-
-[tasks.install-ansible-deps]
-description = "安装 Ansible 依赖"
-run = [
-  "ansible-galaxy install -r ./ansible/requirements.yml --roles-path ~/.ansible/roles",
-  "ansible-galaxy collection install -r ./ansible/requirements.yml"
-]
-[tasks.create-ecr]
-description = "创建 ECR 仓库 mise create-ecr app-name"
-run = "aws ecr create-repository --repository-name {{arg(name='repo')}}"
-
+# ===============================================
+# Docker 相关
+# ===============================================
 
 [tasks.login-ecr]
 description = "登录 ECR"
 run = "aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY"
 
-
 [tasks.deploy-hello]
 description = "部署 hello world"
 run = "ansible-playbook ansible/playbooks/bun-hello.yml -i ansible/inventory.ini"
 
-
+# ===============================================
+# 服务器初始化
+# ===============================================
 
 [tasks.bootstrapserver]
-description = "初始化一台服务器"
+description = "初始化服务器"
 run = "ansible-playbook ansible/playbooks/bootstrap.yml -i ansible/inventory.ini --ask-pass"
 
 [tasks.bootstrapserverwithoutpass]
-description = "初始化一台服务器, 无需密码"
+description = "初始化服务器（无密码）"
 run = "ansible-playbook ansible/playbooks/infra.yml"
 
+# ===============================================
+# 基础设施部署
+# ===============================================
 
 [tasks.postgres]
-description = "部署 PostgreSQL 独立服务"
-run = "ansible-playbook ansible/playbooks/deploy-postgres-standalone.yml"
+description = "部署 PostgreSQL"
+run = "ansible-playbook ansible/playbooks/deploy-postgres-infra.yml"
 
 [tasks.redis]
-description = "部署 Redis 独立服务"
-run = "ansible-playbook ansible/playbooks/deploy-redis-standalone.yml"
+description = "部署 Redis"
+run = "ansible-playbook ansible/playbooks/deploy-redis-infra.yml"
 
 [tasks.caddy]
-description = "部署 Caddy 独立服务"
-run = "ansible-playbook ansible/playbooks/deploy-caddy-standalone.yml"
+description = "部署 Caddy"
+run = "ansible-playbook ansible/playbooks/deploy-caddy-infra.yml"
+
 
 [tasks.deploy-app]
-description = "部署应用服务，用法: mise deploy-app app-name"
+description = "部署应用"
 run = "ansible-playbook ansible/playbooks/deploy-app-standalone.yml --extra-vars app_name={{arg(name='app_name')}}"
 
-# .mise.toml
+# ===============================================
+# 环境变量同步
+# ===============================================
 
 [tasks.env]
-run = '''
+description = "同步开发环境变量"
+run = """
 PROJECT=$(basename "$PWD")
-aws ssm get-parameter \
-  --name "/$PROJECT/.env" \
-  --with-decryption \
-  --query 'Parameter.Value' \
-  --output text > .env
-echo "✅ 开发环境已同步到 .env"
-'''
+aws ssm get-parameter --name "/$PROJECT/.env" --with-decryption --query 'Parameter.Value' --output text > .env
+echo "开发环境已同步到 .env"
+"""
 
-[tasks."prod"]
-run = '''
+[tasks.prod]
+description = "同步生产环境变量"
+run = """
 PROJECT=$(basename "$PWD")
-aws ssm get-parameter \
-  --name "/$PROJECT/.env.prod" \
-  --with-decryption \
-  --query 'Parameter.Value' \
-  --output text > .env.prod
-echo "✅ 生产环境已同步到 .env.prod"
-'''
+aws ssm get-parameter --name "/$PROJECT/.env.prod" --with-decryption --query 'Parameter.Value' --output text > .env.prod  
+echo "生产环境已同步到 .env.prod"
+"""
+
+
+[tasks.run-db-task]  
+description = "执行数据库任务"
+run = """
+TASK_FILE="{{arg(name='task_file')}}"
+if [ -z "$TASK_FILE" ]; then
+    echo "请指定任务文件名（包含.sql后缀）"
+    echo "使用方法: mise run-db-task task_file=20250912-create-test-database.sql"
+    exit 1
+fi
+
+ansible-playbook ansible/playbooks/deploy-database-tasks-infra.yml \
+  --extra-vars "task_name=$TASK_FILE"
+"""
+

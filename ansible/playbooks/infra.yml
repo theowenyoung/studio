@@ -30,7 +30,7 @@
           - "零停机工具: docker rollout 已安装"
           - ""
           - "下一步: 部署独立服务（每个服务自动创建所需目录）"
-          - "  ansible-playbook -i inventory/production playbooks/deploy-postgres-standalone.yml"
-          - "  ansible-playbook -i inventory/production playbooks/deploy-redis-standalone.yml"
-          - "  ansible-playbook -i inventory/production playbooks/deploy-caddy-standalone.yml"
+          - "  mise deploy-infra postgres"
+          - "  mise deploy-infra redis"
+          - "  mise deploy-infra caddy"
       tags: [info]

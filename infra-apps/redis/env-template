@@ -1,0 +1,10 @@
+# Redis 环境变量模板
+# 部署时从 AWS Parameter Store 获取实际值
+
+# Redis 密码（从 AWS Parameter Store 获取）
+REDIS_PASSWORD={{ redis_password }}
+
+# 可选配置
+# REDIS_MAX_MEMORY=512mb
+# REDIS_LOG_LEVEL=notice
+

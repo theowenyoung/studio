@@ -1,0 +1,24 @@
+# 通用应用环境变量模板
+# 部署时从 AWS Parameter Store 获取实际值
+
+# 应用配置
+APP_NAME={{ app_name }}
+APP_ENV={{ app_env | default('production') }}
+APP_PORT={{ app_port | default('3000') }}
+
+# 数据库连接（从对应的 Parameter Store 获取）
+DATABASE_URL={{ database_url }}
+
+# Redis 连接（从对应的 Parameter Store 获取）
+REDIS_URL={{ redis_url }}
+
+# 应用密钥（从 AWS Parameter Store 获取）
+APP_SECRET={{ app_secret }}
+
+# 文件存储
+UPLOAD_DIR=/app/uploads
+LOG_DIR=/app/logs
+
+# 其他配置
+NODE_ENV={{ node_env | default('production') }}
+LOG_LEVEL={{ log_level | default('info') }}
