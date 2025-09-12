@@ -95,10 +95,10 @@
 
     # 部署服务
     - name: 启动 PostgreSQL 服务
-      community.docker.docker_compose:
+      community.docker.docker_compose_v2:
         project_src: /data/postgres
         state: present
-        pull: yes
+        pull: always
       become_user: "{{ deploy_user | default('deploy') }}"
       tags: [deploy]
 
