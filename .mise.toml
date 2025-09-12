@@ -112,14 +112,7 @@ echo "生产环境已同步到 .env.prod"
 [tasks.run-db-task]  
 description = "执行数据库任务"
 run = """
-TASK_FILE="{{arg(name='task_file')}}"
-if [ -z "$TASK_FILE" ]; then
-    echo "请指定任务文件名（包含.sql后缀）"
-    echo "使用方法: mise run-db-task task_file=20250912-create-test-database.sql"
-    exit 1
-fi
-
 ansible-playbook ansible/playbooks/deploy-database-tasks-infra.yml \
-  --extra-vars "task_name=$TASK_FILE"
+  --extra-vars "task_name={{arg(name='task_file')}}"
 """
 

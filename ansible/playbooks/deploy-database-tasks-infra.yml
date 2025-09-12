@@ -101,7 +101,7 @@
         docker compose --profile task up -d db-task-runner
         sleep 3
         docker compose --profile task exec -T db-task-runner \
-          psql -f "/tasks/{{ task_name }}" --echo-all --set ON_ERROR_STOP=1
+          bash -c 'sed "s/\$TEST_DEMO_PASSWORD/$TEST_DEMO_PASSWORD/g" /tasks/{{ task_name }} | psql --echo-all --set ON_ERROR_STOP=1'
         docker compose --profile task down db-task-runner
       become_user: "{{ deploy_user | default('deploy') }}"
       register: task_result
@@ -111,8 +111,25 @@
       debug:
         msg:
           - "✅ 数据库任务执行完成: {{ task_name }}"
-          - "输出: {{ task_result.stdout }}"
-      when: task_name is defined and task_result is defined and task_result.rc == 0
+          - "退出码: {{ task_result.rc }}"
+          - "标准输出: {{ task_result.stdout }}"
+          - "错误输出: {{ task_result.stderr }}"
+      when: task_name is defined and task_result is defined and not task_result.skipped|default(false)
+      
+    - name: 任务执行失败时显示详细错误
+      debug:
+        msg:
+          - "❌ 数据库任务执行失败: {{ task_name }}"
+          - "退出码: {{ task_result.rc }}"
+          - "错误详情: {{ task_result.stderr }}"
+      when: task_name is defined and task_result is defined and not task_result.skipped|default(false) and task_result.rc != 0
+      
+    - name: 任务文件不存在时的提示
+      debug:
+        msg:
+          - "❌ 任务文件不存在: {{ task_name }}"
+          - "请检查文件路径: infra-apps/database-tasks/tasks/{{ task_name }}"
+      when: task_name is defined and task_name != "" and (task_file_check is not defined or not task_file_check.stat.exists)
       
     - name: 显示部署结果
       debug:
@@ -124,5 +141,5 @@
           - "日志目录: {{ service_data_dir }}/logs/"
           - ""
           - "🔧 使用方法:"
-          - "  执行任务: mise run-db-task task_file=20250912-create-test-database.sql"
+          - "  执行任务: mise run-db-task 20250912-create-test-database.sql"
           - "  查看任务: ls infra-apps/database-tasks/tasks/*.sql"
