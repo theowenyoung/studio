@@ -8,10 +8,15 @@ A unified monorepo containing all my public projects, experiments, and deploymen
 
 
 ```
-# brew 安装 mkcert 本地证书管理工具，然后安装
-
-mkcert -install
+# brew 安装 mkcert 本地证书管理工具，然后执行以下命令安装证书
 make setup-local
+
+# 启动 service，比如postgres,redis, caddy
+make service
+
+# 启动你的应用
+
+make devxxx
 ```
 
 
