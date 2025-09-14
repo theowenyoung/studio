@@ -258,4 +258,4 @@ ansible-playbook ansible/playbooks/deploy-database-tasks-infra.yml \
 
 [tasks.builddocker]
 description = "构建 Docker 镜像"
-run = "docker build --platform linux/amd64 --target app --build-arg APP=bun-demo -t bun-demo ./docker/bun"
+run = "docker build --platform linux/amd64 --target app --build-arg APP=bun-demo -t bun-demo -f ./docker/bun/Dockerfile ."

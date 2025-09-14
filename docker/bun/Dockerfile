@@ -89,7 +89,7 @@ ENV PORT=3000
 # 复制生产依赖
 COPY --from=prod-deps --chown=appuser:appuser /app/node_modules ./node_modules
 
-# 复制构建产物
+# 复制构建产物（包括服务器文件）
 COPY --from=builder --chown=appuser:appuser /app/js-apps/${APP}/dist ./dist
 
 # 复制共享包
@@ -105,7 +105,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
    CMD curl -f http://localhost:${PORT:-3000}/health 2>/dev/null || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["bun", "run", "start"]
+CMD ["bun", "./dist/index.js"]
 
 
 # ===============================

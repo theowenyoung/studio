@@ -1,33 +1,61 @@
-import { serve } from "bun";
-import index from "./index.html";
+import { serve, file } from "bun"
 
 const server = serve({
-  routes: {
-    // Serve index.html for all unmatched routes.
-    "/*": index,
-
-    "/api/hello": {
-      async GET(req) {
+  port: process.env.PORT || 3000,
+  
+  async fetch(req) {
+    const url = new URL(req.url);
+    
+    // API routes
+    if (url.pathname === "/health") {
+      return new Response("OK", { status: 200 });
+    }
+    
+    if (url.pathname === "/api/hello") {
+      if (req.method === "GET") {
         return Response.json({
           message: "Hello, world!",
           method: "GET",
         });
-      },
-      async PUT(req) {
+      }
+      if (req.method === "PUT") {
         return Response.json({
           message: "Hello, world!",
           method: "PUT",
         });
-      },
-    },
-
-    "/api/hello/:name": async req => {
-      const name = req.params.name;
+      }
+    }
+    
+    if (url.pathname.startsWith("/api/hello/")) {
+      const name = url.pathname.split("/")[3];
       return Response.json({
         message: `Hello, ${name}!`,
       });
-    },
-    "/health": () => new Response("OK", { status: 200 }),
+    }
+    
+    // Static files from dist directory
+    if (process.env.NODE_ENV === "production") {
+      try {
+        const filePath = url.pathname === "/" ? "/index.html" : url.pathname;
+        const staticFile = file(`./dist${filePath}`);
+        if (await staticFile.exists()) {
+          return new Response(staticFile);
+        }
+      } catch (error) {
+        console.log(`Static file not found: ${url.pathname}`);
+      }
+    }
+    
+    // Fallback to index.html for SPA routing
+    const indexFile = process.env.NODE_ENV === "production" 
+      ? file("./dist/index.html")
+      : file("./src/index.html");
+    
+    return new Response(indexFile, {
+      headers: {
+        "Content-Type": "text/html",
+      },
+    });
   },
 
   development: process.env.NODE_ENV !== "production" && {
