@@ -12,7 +12,7 @@
 }
 
 # 主应用域名
-test-demo.owenyoung.com {
+node-demo.owenyoung.com {
     # 健康检查端点
     handle /health {
         respond "OK" 200
@@ -21,7 +21,7 @@ test-demo.owenyoung.com {
     
     # API 路由
     handle /api/* {
-        reverse_proxy app:3000 {
+        reverse_proxy node-demo:3000 {
             header_up Host {http.request.host}
             header_up X-Real-IP {http.request.remote.host}
             header_up X-Forwarded-For {http.request.remote.host}
@@ -43,7 +43,7 @@ test-demo.owenyoung.com {
     
     # 默认应用路由
     handle {
-        reverse_proxy app:3000 {
+        reverse_proxy node-demo:3000 {
             header_up Host {http.request.host}
             header_up X-Real-IP {http.request.remote.host}
             header_up X-Forwarded-For {http.request.remote.host}
