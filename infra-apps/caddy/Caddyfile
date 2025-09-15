@@ -5,14 +5,14 @@
 
 {
     # Let's Encrypt 邮箱
-    email ${ADMIN_EMAIL}
+    email owen@owenyoung.com
     
     # 生产环境配置
     admin off
 }
 
 # 主应用域名
-${TEST_DEMO_DOMAIN} {
+test-demo.owenyoung.com {
     # 健康检查端点
     handle /health {
         respond "OK" 200
@@ -21,7 +21,7 @@ ${TEST_DEMO_DOMAIN} {
     
     # API 路由
     handle /api/* {
-        reverse_proxy node-demo:3000 {
+        reverse_proxy app:3000 {
             header_up Host {http.request.host}
             header_up X-Real-IP {http.request.remote.host}
             header_up X-Forwarded-For {http.request.remote.host}
@@ -43,7 +43,7 @@ ${TEST_DEMO_DOMAIN} {
     
     # 默认应用路由
     handle {
-        reverse_proxy node-demo:3000 {
+        reverse_proxy app:3000 {
             header_up Host {http.request.host}
             header_up X-Real-IP {http.request.remote.host}
             header_up X-Forwarded-For {http.request.remote.host}

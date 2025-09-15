@@ -1,22 +1,103 @@
 ---
 # =====================================
-# Caddy 基础设施部署
-# 使用统一部署脚本
+# Caddy 部署 - 本地模板处理 + 文件同步 + 服务器部署
 # =====================================
-- name: Deploy Caddy Infrastructure
+- name: Deploy Caddy with Local Template Processing
+  hosts: localhost
+  gather_facts: no
+  become: no
+
+  vars:
+    aws_region: "{{ region | default('us-west-2') }}"
+
+  tasks:
+    - name: 显示本地处理信息
+      debug:
+        msg:
+          - "=== Caddy 本地模板处理 ==="
+          - "AWS 区域: {{ aws_region }}"
+          - "========================="
+
+    - name: 检查 Caddy 应用目录
+      stat:
+        path: "{{ playbook_dir }}/../../infra-apps/caddy"
+      register: caddy_dir
+
+    - name: 验证 Caddy 目录存在
+      fail:
+        msg: "Caddy 目录不存在: infra-apps/caddy"
+      when: not caddy_dir.stat.exists
+
+    - name: 执行本地模板处理
+      shell: |
+        cd {{ playbook_dir }}/../../infra-apps/caddy
+        ./deploy.sh template
+      register: template_result
+
+    - name: 显示模板处理结果
+      debug:
+        msg: "{{ template_result.stdout_lines }}"
+
+# =====================================
+# 服务器部署阶段
+# =====================================
+- name: Deploy to Server
   hosts: all
   gather_facts: yes
   become: yes
-  
+
+  vars:
+    deploy_user: "{{ user | default('deploy') }}"
+    aws_region: "{{ region | default('us-west-2') }}"
+
   tasks:
-    - name: 部署 Caddy 服务
-      script: "{{ playbook_dir }}/../../infra-apps/caddy/deploy.sh"
-      environment:
-        ENV_MODE: aws
-        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
-        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
-      register: caddy_deploy_result
+    - name: 显示服务器部署信息
+      debug:
+        msg:
+          - "=== Caddy 服务器部署 ==="
+          - "服务器: {{ inventory_hostname }}"
+          - "部署用户: {{ deploy_user }}"
+          - "========================="
+
+    - name: 创建 Caddy 部署目录
+      file:
+        path: "/opt/caddy"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0755'
+
+    - name: 同步 Caddy 配置文件到服务器
+      synchronize:
+        src: "{{ playbook_dir }}/../../infra-apps/caddy/"
+        dest: "/opt/caddy/"
+        delete: yes
+        rsync_opts:
+          - "--exclude=certs/*"
+          - "--exclude=data/*"
+          - "--exclude=config/*"
+          - "--exclude=logs/*"
+      become_user: "{{ deploy_user }}"
+
+    - name: 执行 Caddy 部署
+      shell: |
+        cd /opt/caddy
+        ./deploy.sh deploy
+      become_user: "{{ deploy_user }}"
+      register: deploy_result
 
     - name: 显示部署结果
       debug:
-        var: caddy_deploy_result.stdout_lines
+        msg:
+          - "=== Caddy 部署完成 ==="
+          - "状态: {{ 'SUCCESS' if deploy_result.rc == 0 else 'FAILED' }}"
+          - "输出:"
+          - "{{ deploy_result.stdout_lines }}"
+
+    - name: 部署失败时显示错误
+      debug:
+        msg:
+          - "=== 部署失败 ==="
+          - "错误输出:"
+          - "{{ deploy_result.stderr_lines }}"
+      when: deploy_result.rc != 0
