@@ -1,0 +1,78 @@
+---
+# =====================================
+# 批量应用部署
+# 依次部署所有 Node.js 应用
+# =====================================
+- name: Deploy All Node.js Applications
+  hosts: all
+  gather_facts: yes
+  
+  vars:
+    deploy_environment: "{{ env | default('aws') }}"  # 部署环境
+    build_images: "{{ build | default(true) }}"       # 是否构建镜像
+    
+  tasks:
+    - name: 显示批量部署计划
+      debug:
+        msg:
+          - "=== Node.js 应用批量部署 ==="
+          - "环境: {{ deploy_environment }}"
+          - "构建镜像: {{ build_images }}"
+          - "数据目录: /data/"
+          - "共享网络: shared_network"
+          - ""
+          - "发现的应用:"
+          - "- node-demo (Node.js + Fastify + React)"
+          - "- 可扩展更多应用..."
+          - "========================="
+      tags: [info]
+
+    - name: 扫描可用的 Node.js 应用
+      local_action:
+        module: find
+        paths: "{{ playbook_dir }}/../../js-apps"
+        file_type: directory
+        excludes: ["node_modules", "dist", ".git"]
+      register: available_apps
+      become: false
+
+    - name: 过滤有效的应用（包含 package.json）
+      local_action:
+        module: stat
+        path: "{{ item.path }}/package.json"
+      register: app_package_stats
+      loop: "{{ available_apps.files }}"
+      become: false
+
+    - name: 构建有效应用列表
+      set_fact:
+        valid_apps: "{{ valid_apps | default([]) + [item.item.path | basename] }}"
+      loop: "{{ app_package_stats.results }}"
+      when: item.stat.exists
+
+    - name: 显示发现的应用
+      debug:
+        msg: "发现的 Node.js 应用: {{ valid_apps | join(', ') }}"
+      tags: [info]
+
+    - name: 批量部署应用
+      include_tasks: "{{ playbook_dir }}/deploy-node-app.yml"
+      vars:
+        app_name: "{{ item }}"
+        deploy_environment: "{{ deploy_environment }}"
+        build_image: "{{ build_images }}"
+      loop: "{{ valid_apps }}"
+      tags: [deploy]
+
+    - name: 批量部署完成报告
+      debug:
+        msg:
+          - "=== 批量部署完成 ==="
+          - "已部署应用: {{ valid_apps | join(', ') }}"
+          - "环境: {{ deploy_environment }}"
+          - ""
+          - "验证命令:"
+          - "{% for app in valid_apps %}"
+          - "  curl http://{{ inventory_hostname }}:300{{ loop.index0 }}/health  # {{ app }}"
+          - "{% endfor %}"
+      tags: [result]

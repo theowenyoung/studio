@@ -1,0 +1,38 @@
+---
+# =====================================
+# 独立应用部署（简化版）
+# 适用于单个 Node.js 应用的快速部署
+# =====================================
+- name: Deploy Standalone Node.js App
+  hosts: all
+  gather_facts: yes
+  become: yes
+  
+  vars:
+    app_name: "{{ app | default('node-demo') }}"  # 应用名称
+    deploy_environment: "{{ env | default('aws') }}"  # 部署环境
+    
+  tasks:
+    - name: 显示部署信息
+      debug:
+        msg:
+          - "=== 独立应用部署 ==="
+          - "应用: {{ app_name }}"
+          - "环境: {{ deploy_environment }}"
+          - "==================="
+      tags: [info]
+
+    - name: 部署应用
+      script: "{{ playbook_dir }}/../../js-apps/{{ app_name }}/deploy.sh"
+      args:
+        chdir: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
+      environment:
+        ENV_MODE: "{{ deploy_environment }}"
+        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
+        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
+      register: app_deploy_result
+      become_user: "{{ deploy_user | default('deploy') }}"
+
+    - name: 显示部署结果
+      debug:
+        var: app_deploy_result.stdout_lines

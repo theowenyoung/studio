@@ -11,10 +11,6 @@ services:
       NODE_ENV: production
       PORT: 3000
       HOST: 0.0.0.0
-      
-      # 数据库配置
-      DATABASE_URL: postgresql://${POSTGRES_USER:-test_demo_user}:${TEST_DEMO_POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-test_demo_production}
-    
     # 引用环境文件
     env_file:
       - .env

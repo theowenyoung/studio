@@ -1,0 +1,54 @@
+#!/bin/bash
+# =====================================
+# Node.js 应用零停机部署脚本模板
+# 使用 docker-rollout 进行零停机部署
+# =====================================
+
+set -e
+
+APP_NAME="{{ app_name }}"
+IMAGE_NAME="{{ image_name | default(app_name) }}"
+CONTAINER_NAME="${APP_NAME}-app"
+NETWORK_NAME="shared_network"
+DATA_DIR="/data/${APP_NAME}"
+
+echo "🚀 开始零停机部署 ${APP_NAME}..."
+
+# 确保数据目录存在
+mkdir -p "${DATA_DIR}"
+
+# 确保网络存在
+if ! docker network ls | grep -q "${NETWORK_NAME}"; then
+    echo "📡 创建共享网络..."
+    docker network create "${NETWORK_NAME}"
+fi
+
+# 检查镜像是否存在
+if ! docker image ls | grep -q "${IMAGE_NAME}"; then
+    echo "❌ 镜像 ${IMAGE_NAME} 不存在，请先构建镜像"
+    exit 1
+fi
+
+# 使用 docker-rollout 进行零停机部署
+echo "🔄 执行零停机部署..."
+
+docker-rollout \
+    --image "${IMAGE_NAME}:latest" \
+    --name "${CONTAINER_NAME}" \
+    --network "${NETWORK_NAME}" \
+    --env NODE_ENV=production \
+    --env DATABASE_URL="{{ database_url | default('postgresql://user:pass@postgres:5432/db') }}" \
+{% for env_var in extra_env_vars | default([]) %}
+    --env "{{ env_var }}" \
+{% endfor %}
+    --volume "${DATA_DIR}:/app/data" \
+    --publish "{{ app_port | default('3000') }}:3000" \
+    --health-cmd "curl -f http://localhost:3000/health" \
+    --health-interval 30s \
+    --health-timeout 10s \
+    --health-retries 3 \
+    --restart unless-stopped
+
+echo "✅ 零停机部署完成！"
+echo "🌐 访问地址: http://{{ inventory_hostname }}:{{ app_port | default('3000') }}"
+echo "🔍 健康检查: http://{{ inventory_hostname }}:{{ app_port | default('3000') }}/health"

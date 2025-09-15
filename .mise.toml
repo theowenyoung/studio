@@ -277,6 +277,50 @@ ansible-playbook ansible/playbooks/deploy-database-tasks-infra.yml \
   --extra-vars "task_name=$TASK_FILE"
 """
 
+# ===============================================
+# Node.js 应用部署任务
+# ===============================================
+
+[tasks.deploy-node-app]
+description = "部署 Node.js 应用"
+run = """
+APP_NAME={{arg(name="app_name", default="node-demo")}}
+ENV_MODE={{arg(name="env", default="aws")}}
+BUILD_IMAGE={{arg(name="build", default="true")}}
+
+echo "🚀 部署 Node.js 应用: $APP_NAME"
+echo "环境: $ENV_MODE"
+echo "构建镜像: $BUILD_IMAGE"
+
+ansible-playbook ansible/playbooks/deploy-node-app.yml \
+  --extra-vars "app=$APP_NAME env=$ENV_MODE build=$BUILD_IMAGE"
+"""
+
+[tasks.deploy-node-standalone]
+description = "快速部署单个 Node.js 应用"
+run = """
+APP_NAME={{arg(name="app_name", default="node-demo")}}
+ENV_MODE={{arg(name="env", default="aws")}}
+
+echo "⚡ 快速部署应用: $APP_NAME"
+ansible-playbook ansible/playbooks/deploy-app-standalone.yml \
+  --extra-vars "app=$APP_NAME env=$ENV_MODE"
+"""
+
+[tasks.deploy-all-apps]
+description = "批量部署所有 Node.js 应用"
+run = """
+ENV_MODE={{arg(name="env", default="aws")}}
+BUILD_IMAGE={{arg(name="build", default="true")}}
+
+echo "🚀 批量部署所有 Node.js 应用"
+echo "环境: $ENV_MODE"
+echo "构建镜像: $BUILD_IMAGE"
+
+ansible-playbook ansible/playbooks/deploy-all-apps.yml \
+  --extra-vars "env=$ENV_MODE build=$BUILD_IMAGE"
+"""
+
 
 
 
