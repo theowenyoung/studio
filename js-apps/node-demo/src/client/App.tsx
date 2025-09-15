@@ -75,7 +75,7 @@ export function App() {
         <img src={logo} alt="Bun Logo" className="logo bun-logo" />
       </div>
 
-      <h1>Bun + React + PostgreSQL Demo</h1>
+      <h1>Node.js + Fastify + React + PostgreSQL Demo</h1>
       
       {/* 添加记录表单 */}
       <div className="card">

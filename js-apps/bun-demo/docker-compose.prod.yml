@@ -1,0 +1,59 @@
+# =====================================
+# Bun Demo 生产环境配置
+# =====================================
+services:
+  bun-demo:
+    image: bun-demo:latest
+    restart: unless-stopped
+    
+    environment:
+      # 应用配置
+      NODE_ENV: production
+      PORT: 3000
+      
+      # 数据库配置
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-test_demo_production}
+      POSTGRES_USER: ${POSTGRES_USER:-test_demo_user}
+      TEST_DEMO_POSTGRES_PASSWORD: ${TEST_DEMO_POSTGRES_PASSWORD}
+    
+    # 引用环境文件
+    env_file:
+      - .env
+    
+    # 生产环境不暴露端口，通过反向代理访问
+    expose:
+      - "3000"
+    
+    networks:
+      - shared_network
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  shared_network:
+    external: true

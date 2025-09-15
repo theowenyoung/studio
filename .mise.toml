@@ -23,17 +23,41 @@ description = "设置开发环境"
 run = "pip install -r requirements-dev.txt"
 
 [tasks.dev]
-description = "运行开发应用"
+description = "运行开发应用 (Bun)"
 run = """
 cd js-apps/{{arg(name="app_name")}}
 bun run dev
 """
 
+[tasks.nodedev]
+description = "运行 Node.js 开发应用 (pnpm workspace)"
+run = """
+pnpm --filter {{arg(name="app_name")}} dev
+"""
+
+[tasks.pnpmdev]
+description = "使用 pnpm workspace 运行开发应用"
+run = """
+pnpm --filter {{arg(name="app_name")}} dev
+"""
+
 [tasks.build]
-description = "构建应用"
+description = "构建应用 (Bun)"
 run = """
 cd js-apps/{{arg(name="app_name")}}
 bun run build
+"""
+
+[tasks.pnpmbuild]
+description = "使用 pnpm workspace 构建应用"
+run = """
+pnpm --filter {{arg(name="app_name")}} build
+"""
+
+[tasks.pnpminstall]
+description = "安装所有 workspace 依赖"
+run = """
+pnpm install
 """
 
 [tasks.test]
@@ -258,4 +282,25 @@ ansible-playbook ansible/playbooks/deploy-database-tasks-infra.yml \
 
 [tasks.builddocker]
 description = "构建 Docker 镜像"
-run = "docker build --platform linux/amd64 --target app --build-arg APP=bun-demo -t bun-demo -f ./docker/bun/Dockerfile ."
+run = """
+APP_NAME={{arg(name="app_name", default="bun-demo")}}
+echo "🔨 构建应用: $APP_NAME"
+
+case $APP_NAME in
+  bun-demo)
+    echo "📦 使用 Bun 镜像构建..."
+    docker build --platform linux/amd64 --target app --build-arg APP=bun-demo -t bun-demo -f ./docker/bun/Dockerfile .
+    ;;
+  node-demo)
+    echo "📦 使用 Node.js + PNPM 镜像构建..."
+    docker build --platform linux/amd64 --target app -t node-demo -f ./js-apps/node-demo/Dockerfile.pnpm .
+    ;;
+  *)
+    echo "❌ 未知应用: $APP_NAME"
+    echo "支持的应用: bun-demo, node-demo"
+    exit 1
+    ;;
+esac
+
+echo "✅ 构建完成: $APP_NAME"
+"""

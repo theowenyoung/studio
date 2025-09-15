@@ -1,0 +1,5 @@
+packages:
+  # JavaScript applications
+  - 'js-apps/*'
+  # JavaScript packages/libraries
+  - 'js-packages/*'

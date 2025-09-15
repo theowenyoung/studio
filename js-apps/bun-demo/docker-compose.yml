@@ -1,0 +1,54 @@
+# =====================================
+# Bun Demo 本地开发配置
+# =====================================
+services:
+  bun-demo:
+    image: bun-demo:latest
+    restart: unless-stopped
+    
+    environment:
+      # 应用配置
+      NODE_ENV: production
+      PORT: 3000
+      
+      # 数据库配置
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: test_demo_production
+      POSTGRES_USER: test_demo_user
+      TEST_DEMO_POSTGRES_PASSWORD: ${TEST_DEMO_POSTGRES_PASSWORD}
+    
+    # 引用 .env 文件
+    env_file:
+      - .env
+    
+    ports:
+      # 本地开发暴露端口
+      - "3000:3000"
+    
+    networks:
+      - shared_network
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # 等待数据库启动
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    # 日志配置
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  shared_network:
+    external: true
