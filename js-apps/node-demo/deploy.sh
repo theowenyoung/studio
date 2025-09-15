@@ -83,6 +83,29 @@ build_and_push() {
     sed -i.bak "s|image: $APP_NAME:latest|image: $IMAGE_URI|g" docker-compose.prod.yml
 }
 
+# 执行数据库迁移
+run_migration() {
+    log "执行数据库迁移"
+
+    # 使用临时容器执行 Prisma 操作
+    local image_uri="$ECR_REGISTRY/$APP_NAME:latest"
+
+    # 确保共享网络存在
+    if ! docker network ls | grep -q "shared_network"; then
+        log "创建共享网络..."
+        docker network create shared_network
+    fi
+
+    # 生成 Prisma 客户端并推送数据库结构
+    docker run --rm \
+        --env-file .env \
+        --network shared_network \
+        "$image_uri" \
+        sh -c "cd /app && npm run db:generate && npm run db:push"
+
+    log "数据库迁移完成"
+}
+
 # 启动服务
 start_service() {
     log "启动 $APP_NAME 服务"
@@ -147,12 +170,32 @@ main() {
         "health")
             health_check
             ;;
+        "migrate")
+            load_env
+            login_ecr
+            run_migration
+            ;;
         "deploy")
             log "开始完整部署流程"
             load_env
             login_ecr
             build_and_push
             stop_service
+            run_migration
+            start_service
+            if health_check; then
+                log "部署成功 ✓"
+            else
+                log "部署失败，显示日志:"
+                show_logs
+                exit 1
+            fi
+            ;;
+        "deploy-only")
+            log "仅部署应用（不重新构建镜像）"
+            load_env
+            stop_service
+            run_migration
             start_service
             if health_check; then
                 log "部署成功 ✓"
@@ -163,14 +206,16 @@ main() {
             fi
             ;;
         *)
-            echo "用法: $0 {deploy|load-env|build|up|down|logs|health}"
-            echo "  deploy    - 完整部署流程"
-            echo "  load-env  - 从 Parameter Store 加载环境变量"
-            echo "  build     - 构建并推送 Docker 镜像"
-            echo "  up        - 启动服务"
-            echo "  down      - 停止服务"
-            echo "  logs      - 显示日志"
-            echo "  health    - 健康检查"
+            echo "用法: $0 {deploy|deploy-only|migrate|load-env|build|up|down|logs|health}"
+            echo "  deploy      - 完整部署流程（构建+迁移+部署）"
+            echo "  deploy-only - 仅部署应用（不重新构建镜像）"
+            echo "  migrate     - 仅执行数据库迁移"
+            echo "  load-env    - 从 Parameter Store 加载环境变量"
+            echo "  build       - 构建并推送 Docker 镜像"
+            echo "  up          - 启动服务"
+            echo "  down        - 停止服务"
+            echo "  logs        - 显示日志"
+            echo "  health      - 健康检查"
             exit 1
             ;;
     esac
