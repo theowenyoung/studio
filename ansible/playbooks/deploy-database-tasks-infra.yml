@@ -1,37 +1,118 @@
 ---
 # =====================================
-# Database Tasks 基础设施部署
-# 使用统一部署脚本
+# Database Tasks 本地执行
+# 通过 Ansible 传递 AWS 凭证到服务器执行任务
 # =====================================
-- name: Deploy Database Tasks Infrastructure
+- name: Execute Database Task
   hosts: all
   gather_facts: yes
   become: yes
-  
-  tasks:
-    - name: 设置 Database Tasks 环境
-      script: "{{ playbook_dir }}/../../infra-apps/database-tasks/deploy.sh setup"
-      environment:
-        ENV_MODE: aws
-        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
-        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
-      register: db_tasks_setup_result
-    
-    - name: 显示设置结果
-      debug:
-        var: db_tasks_setup_result.stdout_lines
 
-    # 可选：执行指定的数据库任务
+  vars:
+    aws_region: "{{ region | default('us-west-2') }}"
+    deploy_user: "{{ user | default('deploy') }}"
+    task_file: "{{ task_name }}"
+
+  tasks:
+    - name: 验证任务文件名
+      fail:
+        msg: "请指定任务文件: --extra-vars task_name=20250912-create-test-database.sql"
+      when: task_file is not defined or task_file == ""
+
+    - name: 显示任务信息
+      debug:
+        msg:
+          - "=== Database Task 执行 ==="
+          - "服务器: {{ inventory_hostname }}"
+          - "任务文件: {{ task_file }}"
+          - "AWS 区域: {{ aws_region }}"
+          - "========================="
+
+    - name: 获取本地 AWS 凭证
+      local_action: "shell aws configure get aws_access_key_id && aws configure get aws_secret_access_key"
+      register: aws_credentials
+      run_once: true
+      become: no
+
+    - name: 确保数据库任务目录存在
+      file:
+        path: "/opt/database-tasks"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0755'
+
+    - name: 复制数据库任务文件到服务器
+      synchronize:
+        src: "{{ playbook_dir }}/../../infra-apps/database-tasks/"
+        dest: "/opt/database-tasks/"
+        delete: yes
+        rsync_opts:
+          - "--exclude=.env"
+          - "--exclude=logs/*"
+          - "--exclude=backups/*"
+      become_user: "{{ deploy_user }}"
+
+    - name: 从 AWS Parameter Store 获取环境变量
+      shell: |
+        export AWS_ACCESS_KEY_ID={{ aws_credentials.stdout_lines[0] }}
+        export AWS_SECRET_ACCESS_KEY={{ aws_credentials.stdout_lines[1] }}
+        export AWS_REGION={{ aws_region }}
+        aws ssm get-parameter --name "/database-tasks/prod/.env" --with-decryption --region {{ aws_region }} --query 'Parameter.Value' --output text
+      register: param_store_env
+      become_user: "{{ deploy_user }}"
+
+    - name: 创建环境变量文件
+      copy:
+        content: "{{ param_store_env.stdout }}"
+        dest: "/opt/database-tasks/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0600'
+
+    - name: 检查 PostgreSQL 服务状态
+      shell: docker ps | grep postgres | grep Up || echo "POSTGRES_NOT_RUNNING"
+      register: postgres_status
+      become_user: "{{ deploy_user }}"
+
+    - name: 验证 PostgreSQL 服务运行中
+      fail:
+        msg: "PostgreSQL 服务未运行，请先启动数据库服务"
+      when: postgres_status.stdout == "POSTGRES_NOT_RUNNING"
+
+    - name: 确保共享网络存在
+      command: docker network create shared_network
+      failed_when: false
+      become_user: "{{ deploy_user }}"
+
     - name: 执行数据库任务
-      script: "{{ playbook_dir }}/../../infra-apps/database-tasks/deploy.sh run {{ task_name }}"
-      environment:
-        ENV_MODE: aws
-        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
-        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
-      register: db_task_result
-      when: task_name is defined and task_name != ""
-      
+      shell: |
+        cd /opt/database-tasks
+        export $(cat .env | xargs)
+        ./deploy.sh run {{ task_file }}
+      become_user: "{{ deploy_user }}"
+      register: task_result
+
     - name: 显示任务执行结果
       debug:
-        var: db_task_result.stdout_lines
-      when: task_name is defined and task_name != "" and db_task_result is defined
+        msg:
+          - "=== 任务执行完成 ==="
+          - "任务文件: {{ task_file }}"
+          - "状态: {{ 'SUCCESS' if task_result.rc == 0 else 'FAILED' }}"
+          - "输出:"
+          - "{{ task_result.stdout_lines }}"
+
+    - name: 任务失败时显示错误
+      debug:
+        msg:
+          - "=== 任务执行失败 ==="
+          - "错误输出:"
+          - "{{ task_result.stderr_lines }}"
+      when: task_result.rc != 0
+
+    - name: 清理任务文件
+      file:
+        path: "/opt/database-tasks"
+        state: absent
+      become_user: "{{ deploy_user }}"
+      when: cleanup is defined and cleanup == "true"

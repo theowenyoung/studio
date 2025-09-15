@@ -269,12 +269,37 @@ run = "ansible-playbook ansible/playbooks/deploy-redis-infra.yml"
 description = "部署 Caddy (Ansible)"
 run = "ansible-playbook ansible/playbooks/deploy-caddy-infra.yml"
 
-[tasks.run-db-task]  
-description = "执行数据库任务 (Ansible)"
+[tasks.run-db-task]
+description = "执行数据库任务 (生产环境)"
 run = """
 TASK_FILE={{arg(name='task_file')}}
+if [ -z "$TASK_FILE" ]; then
+  echo "❌ 请指定任务文件名"
+  echo "用法: mise run run-db-task task_file=<文件名>"
+  echo "示例: mise run run-db-task task_file=20250912-create-test-database.sql"
+  exit 1
+fi
+echo "🚀 执行生产环境数据库任务: $TASK_FILE"
 ansible-playbook ansible/playbooks/deploy-database-tasks-infra.yml \
   --extra-vars "task_name=$TASK_FILE"
+"""
+
+[tasks.run-db-task-local]
+description = "执行数据库任务 (本地环境)"
+run = """
+TASK_FILE={{arg(name='task_file')}}
+if [ -z "$TASK_FILE" ]; then
+  echo "❌ 请指定任务文件名"
+  echo "用法: mise run run-db-task-local task_file=<文件名>"
+  echo "示例: mise run run-db-task-local task_file=20250912-create-test-database.sql"
+  exit 1
+fi
+echo "🚀 执行本地数据库任务: $TASK_FILE"
+cd infra-apps/database-tasks
+# 使用本地环境变量
+echo "TEST_DEMO_POSTGRES_PASSWORD=test123" > .env
+echo "POSTGRES_PASSWORD=Test123456" >> .env
+./deploy.sh run $TASK_FILE
 """
 
 # ===============================================

@@ -13,7 +13,11 @@ services:
       - PGPORT=5432
       - PGUSER=postgres
       - PGPASSWORD=${POSTGRES_PASSWORD}
-      
+
+      # 传递所有环境变量给 envsubst
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - TEST_DEMO_POSTGRES_PASSWORD=${TEST_DEMO_POSTGRES_PASSWORD:-test123}
+
       # 日志设置
       - PGLOGFILE=/logs/task-execution.log
     
@@ -39,7 +43,7 @@ services:
       - task
     
     # 安装 envsubst 并保持容器运行
-    command: sh -c "apk add --no-cache gettext && tail -f /dev/null"
+    command: sh -c "apk update && apk add --no-cache gettext && tail -f /dev/null"
 
 networks:
   shared_network:

@@ -1,172 +1,206 @@
 ---
 # =====================================
 # Node.js 应用部署
-# 通用 Node.js 应用部署 playbook
+# 本地构建 + ECR + 服务器拉取部署
 # =====================================
 - name: Deploy Node.js Application
-  hosts: all
-  gather_facts: yes
-  become: yes
-  
+  hosts: localhost
+  gather_facts: no
+  become: no
+
   vars:
-    app_name: "{{ app }}"  # 必须参数：应用名 (node-demo, 等)
-    deploy_environment: "{{ env | default('production') }}"  # 部署环境: local, aws, production
-    build_image: "{{ build | default(true) }}"  # 是否构建镜像
-    
+    app_name: "{{ app }}"
+    aws_region: "{{ region | default('us-west-2') }}"
+    ecr_registry: "912951144733.dkr.ecr.us-west-2.amazonaws.com"
+    image_tag: "{{ tag | default('latest') }}"
+
   tasks:
     - name: 验证应用名称
       fail:
         msg: "请指定应用名称: --extra-vars app=node-demo"
       when: app_name is not defined or app_name == ""
-      
-    - name: 验证应用部署脚本存在
-      local_action:
-        module: stat
-        path: "{{ playbook_dir }}/../../js-apps/{{ app_name }}/deploy.sh"
-      register: app_deploy_script_stat
-      become: false
-      
-    - name: 应用部署脚本不存在时失败
-      fail:
-        msg: "应用 {{ app_name }} 的部署脚本不存在: js-apps/{{ app_name }}/deploy.sh"
-      when: not app_deploy_script_stat.stat.exists
 
-    - name: 验证应用配置文件存在
-      local_action:
-        module: stat
-        path: "{{ playbook_dir }}/../../js-apps/{{ app_name }}/package.json"
-      register: app_config_stat
-      become: false
-      
-    - name: 应用配置不存在时失败
-      fail:
-        msg: "应用 {{ app_name }} 的配置不存在: js-apps/{{ app_name }}/package.json"
-      when: not app_config_stat.stat.exists
-
-    - name: 显示部署计划
+    - name: 显示构建信息
       debug:
         msg:
-          - "=== Node.js 应用部署 ==="
+          - "=== Node.js 应用本地构建 ==="
           - "应用名称: {{ app_name }}"
-          - "部署环境: {{ deploy_environment }}"
-          - "构建镜像: {{ build_image }}"
-          - "数据目录: /data/"
-          - "共享网络: shared_network"
+          - "ECR Registry: {{ ecr_registry }}"
+          - "镜像标签: {{ image_tag }}"
+          - "AWS 区域: {{ aws_region }}"
           - "========================="
-      tags: [info]
 
-    - name: 检查共享网络是否存在
-      command: docker network inspect shared_network
-      register: network_check
-      changed_when: false
-      failed_when: false
-      become_user: "{{ deploy_user | default('deploy') }}"
-      tags: [verify]
+    - name: 检查应用目录是否存在
+      stat:
+        path: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
+      register: app_dir
 
-    - name: 创建共享网络（如果不存在）
+    - name: 验证应用目录存在
+      fail:
+        msg: "应用目录不存在: js-apps/{{ app_name }}"
+      when: not app_dir.stat.exists
+
+    - name: 登录 ECR
+      shell: |
+        aws ecr get-login-password --region {{ aws_region }} | \
+        docker login --username AWS --password-stdin {{ ecr_registry }}
+      args:
+        chdir: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
+
+    - name: 构建 Docker 镜像 (linux/amd64)
+      shell: |
+        docker build --platform linux/amd64 \
+          -t {{ app_name }}:{{ image_tag }} \
+          -t {{ ecr_registry }}/{{ app_name }}:{{ image_tag }} .
+      args:
+        chdir: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
+
+    - name: 推送镜像到 ECR
+      shell: docker push {{ ecr_registry }}/{{ app_name }}:{{ image_tag }}
+      args:
+        chdir: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
+
+    - name: 显示构建完成信息
+      debug:
+        msg:
+          - "=== 本地构建完成 ==="
+          - "镜像: {{ ecr_registry }}/{{ app_name }}:{{ image_tag }}"
+          - "开始服务器部署..."
+
+# =====================================
+# 服务器部署阶段
+# =====================================
+- name: Deploy to Server
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  vars:
+    app_name: "{{ app }}"
+    deploy_user: "{{ user | default('deploy') }}"
+    aws_region: "{{ region | default('us-west-2') }}"
+    ecr_registry: "912951144733.dkr.ecr.us-west-2.amazonaws.com"
+    image_tag: "{{ tag | default('latest') }}"
+
+  tasks:
+    - name: 显示服务器部署信息
+      debug:
+        msg:
+          - "=== 服务器部署阶段 ==="
+          - "服务器: {{ inventory_hostname }}"
+          - "应用名称: {{ app_name }}"
+          - "部署用户: {{ deploy_user }}"
+          - "镜像: {{ ecr_registry }}/{{ app_name }}:{{ image_tag }}"
+          - "========================="
+
+    - name: 确保共享网络存在
       command: docker network create shared_network
-      when: network_check.rc != 0
-      become_user: "{{ deploy_user | default('deploy') }}"
-      tags: [network]
-
-    - name: 停止现有应用容器（如果存在）
-      script: "{{ playbook_dir }}/../../js-apps/{{ app_name }}/deploy.sh"
-      args:
-        chdir: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
-      environment:
-        ENV_MODE: "{{ deploy_environment }}"
-        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
-        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
-      register: app_stop_result
       failed_when: false
-      become_user: "{{ deploy_user | default('deploy') }}"
-      tags: [stop]
-      when: deploy_environment != 'local'
-      vars:
-        ansible_python_interpreter: "{{ ansible_playbook_python }}"
-      script: |
-        #!/bin/bash
-        set -e
-        export ENV_MODE="{{ deploy_environment }}"
-        ./deploy.sh down || true
+      become_user: "{{ deploy_user }}"
 
-    - name: 构建应用镜像
-      script: "{{ playbook_dir }}/../../js-apps/{{ app_name }}/deploy.sh"
+    - name: 获取本地 AWS 凭证
+      local_action: "shell aws configure get aws_access_key_id && aws configure get aws_secret_access_key"
+      register: aws_credentials
+      run_once: true
+      become: no
+
+    - name: 创建部署目录
+      file:
+        path: "/opt/{{ app_name }}"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0755'
+
+    - name: 复制 docker-compose 配置到服务器
+      copy:
+        src: "{{ playbook_dir }}/../../js-apps/{{ app_name }}/docker-compose.prod.yml"
+        dest: "/opt/{{ app_name }}/docker-compose.yml"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0644'
+
+    - name: 更新 docker-compose 使用 ECR 镜像
+      replace:
+        path: "/opt/{{ app_name }}/docker-compose.yml"
+        regexp: 'image:\s*{{ app_name }}:latest'
+        replace: 'image: {{ ecr_registry }}/{{ app_name }}:{{ image_tag }}'
+      become_user: "{{ deploy_user }}"
+
+    - name: 从 AWS Parameter Store 获取环境变量
+      shell: |
+        export AWS_ACCESS_KEY_ID={{ aws_credentials.stdout_lines[0] }}
+        export AWS_SECRET_ACCESS_KEY={{ aws_credentials.stdout_lines[1] }}
+        export AWS_REGION={{ aws_region }}
+        aws ssm get-parameter --name "/{{ app_name }}/prod/.env" --with-decryption --region {{ aws_region }} --query 'Parameter.Value' --output text
+      register: param_store_env
+      become_user: "{{ deploy_user }}"
+
+    - name: 创建环境变量文件
+      copy:
+        content: "{{ param_store_env.stdout }}"
+        dest: "/opt/{{ app_name }}/.env"
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
+        mode: '0600'
+
+    - name: 登录 ECR 并拉取最新镜像
+      shell: |
+        export AWS_ACCESS_KEY_ID={{ aws_credentials.stdout_lines[0] }}
+        export AWS_SECRET_ACCESS_KEY={{ aws_credentials.stdout_lines[1] }}
+        export AWS_REGION={{ aws_region }}
+        aws ecr get-login-password --region {{ aws_region }} | \
+        docker login --username AWS --password-stdin {{ ecr_registry }}
+        docker pull {{ ecr_registry }}/{{ app_name }}:{{ image_tag }}
+      become_user: "{{ deploy_user }}"
+
+    - name: 停止旧服务
+      shell: docker compose down || true
       args:
-        chdir: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
-      environment:
-        ENV_MODE: "{{ deploy_environment }}"
-        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
-        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
-      register: app_build_result
-      become_user: "{{ deploy_user | default('deploy') }}"
-      tags: [build]
-      when: build_image | bool
-      vars:
-        ansible_python_interpreter: "{{ ansible_playbook_python }}"
-      script: |
-        #!/bin/bash
-        set -e
-        export ENV_MODE="{{ deploy_environment }}"
-        ./deploy.sh build
+        chdir: "/opt/{{ app_name }}"
+      become_user: "{{ deploy_user }}"
+      ignore_errors: yes
 
-    - name: 部署 Node.js 应用
-      script: "{{ playbook_dir }}/../../js-apps/{{ app_name }}/deploy.sh"
+    - name: 启动服务
+      shell: docker compose up -d
       args:
-        chdir: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
-      environment:
-        ENV_MODE: "{{ deploy_environment }}"
-        AWS_REGION: "{{ aws_region | default('us-west-2') }}"
-        DEPLOY_USER: "{{ deploy_user | default('deploy') }}"
-        NODE_ENV: "{{ node_env | default('production') }}"
-      register: app_deploy_result
-      become_user: "{{ deploy_user | default('deploy') }}"
-      tags: [deploy]
-      vars:
-        ansible_python_interpreter: "{{ ansible_playbook_python }}"
-      script: |
-        #!/bin/bash
-        set -e
-        export ENV_MODE="{{ deploy_environment }}"
-        export NODE_ENV="{{ node_env | default('production') }}"
-        ./deploy.sh up
+        chdir: "/opt/{{ app_name }}"
+      become_user: "{{ deploy_user }}"
+      register: deploy_result
 
-    - name: 等待应用启动
+    - name: 等待服务启动
+      pause:
+        seconds: 10
+
+    - name: 健康检查
       uri:
-        url: "http://localhost:3000/health"
+        url: "http://{{ inventory_hostname }}:3000/health"
         method: GET
-        status_code: 200
+        timeout: 5
       register: health_check
-      retries: 10
+      retries: 5
       delay: 5
       ignore_errors: yes
-      tags: [verify]
 
     - name: 显示部署结果
       debug:
         msg:
           - "=== 部署完成 ==="
           - "应用: {{ app_name }}"
-          - "状态: {{ 'SUCCESS' if health_check is succeeded else 'FAILED' }}"
-          - "健康检查: {{ 'PASSED' if health_check is succeeded else 'FAILED' }}"
+          - "状态: {{ 'SUCCESS' if health_check.status == 200 else 'FAILED' }}"
           - "访问地址: http://{{ inventory_hostname }}:3000"
-          - "健康检查: http://{{ inventory_hostname }}:3000/health"
-      tags: [result]
+          - "健康检查: {{ 'PASS' if health_check.status == 200 else 'FAIL' }}"
 
     - name: 部署失败时显示日志
-      script: "{{ playbook_dir }}/../../js-apps/{{ app_name }}/deploy.sh"
+      shell: docker compose logs --tail=50
       args:
-        chdir: "{{ playbook_dir }}/../../js-apps/{{ app_name }}"
-      environment:
-        ENV_MODE: "{{ deploy_environment }}"
-      register: app_logs_result
-      become_user: "{{ deploy_user | default('deploy') }}"
-      when: health_check is failed
-      tags: [debug]
-      vars:
-        ansible_python_interpreter: "{{ ansible_playbook_python }}"
-      script: |
-        #!/bin/bash
-        set -e
-        export ENV_MODE="{{ deploy_environment }}"
-        ./deploy.sh logs | tail -50
+        chdir: "/opt/{{ app_name }}"
+      become_user: "{{ deploy_user }}"
+      when: health_check.status != 200
+      ignore_errors: yes
+      register: error_logs
+
+    - name: 输出错误日志
+      debug:
+        msg: "{{ error_logs.stdout_lines }}"
+      when: health_check.status != 200
