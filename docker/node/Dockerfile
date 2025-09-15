@@ -1,15 +1,16 @@
-# 多阶段构建 Node.js 生产 Dockerfile
+# 多阶段构建 Node.js 生产 Dockerfile - PNPM 版本
 # ===============================
 # 基础阶段 - 共享的基础配置
 # ===============================
 FROM node:22-alpine AS base
 WORKDIR /app
 
-# 安装系统依赖
+# 安装系统依赖和 pnpm
 RUN apk add --no-cache \
     curl \
     dumb-init \
-    ca-certificates
+    ca-certificates && \
+    npm install -g pnpm@9.0.0
 
 # 创建非 root 用户
 RUN addgroup -g 1001 -S appuser && \
@@ -22,13 +23,12 @@ FROM base AS deps
 WORKDIR /app
 ARG APP=node-demo
 
-# 复制 package 管理文件
-COPY package.json package-lock.json* ./
+# 复制 pnpm workspace 配置
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
 COPY js-apps/${APP}/package.json ./js-apps/${APP}/package.json
 
-# 安装依赖
-RUN npm ci --only=production && npm cache clean --force
-RUN npm ci && npm cache clean --force
+# 安装依赖（pnpm 会自动使用 workspace）
+RUN pnpm install --frozen-lockfile
 
 # ===============================
 # 构建阶段 - 构建应用
@@ -40,15 +40,11 @@ ARG APP=node-demo
 # 复制源码和依赖
 COPY . .
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/package-lock.json ./
+COPY --from=deps /app/js-apps/${APP}/node_modules ./js-apps/${APP}/node_modules
 
-# 进入应用目录并构建
-WORKDIR /app/js-apps/${APP}
-COPY --from=deps /app/js-apps/${APP}/node_modules ./node_modules
-
-# 生成 Prisma 客户端并构建
-RUN npm run db:generate
-RUN npm run build
+# 构建应用
+RUN pnpm --filter ${APP} run db:generate
+RUN pnpm --filter ${APP} run build
 
 # ===============================
 # 生产依赖阶段
@@ -59,12 +55,12 @@ ARG APP=node-demo
 
 ENV NODE_ENV=production
 
-# 复制 package 文件
-COPY js-apps/${APP}/package.json ./package.json
-COPY js-apps/${APP}/package-lock.json* ./
+# 复制 workspace 配置和 package.json
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* ./
+COPY js-apps/${APP}/package.json ./js-apps/${APP}/package.json
 
 # 安装生产依赖
-RUN npm ci --only=production && npm cache clean --force
+RUN pnpm install --frozen-lockfile --prod
 
 # ===============================
 # 生产阶段
@@ -78,6 +74,7 @@ ENV PORT=3000
 
 # 复制生产依赖
 COPY --from=prod-deps --chown=appuser:appuser /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=appuser:appuser /app/js-apps/${APP}/node_modules ./js-apps/${APP}/node_modules
 
 # 复制构建产物
 COPY --from=builder --chown=appuser:appuser /app/js-apps/${APP}/dist ./dist

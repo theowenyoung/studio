@@ -293,7 +293,7 @@ case $APP_NAME in
     ;;
   node-demo)
     echo "📦 使用 Node.js + PNPM 镜像构建..."
-    docker build --platform linux/amd64 --target app -t node-demo -f ./js-apps/node-demo/Dockerfile.pnpm .
+    docker build --platform linux/amd64 --target app --build-arg APP=node-demo -t node-demo -f ./docker/node/Dockerfile .
     ;;
   *)
     echo "❌ 未知应用: $APP_NAME"
