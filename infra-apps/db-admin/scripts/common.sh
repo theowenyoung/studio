@@ -181,43 +181,51 @@ _create_users() {
   local rw_password="$2"
   local ro_password="$3"
 
-  log "Creating users..."
+  log "Creating/updating users..."
 
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$db_name" <<-EOSQL
         -- Read-write user
         DO \$\$
         BEGIN
             IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${db_name}_user') THEN
-                CREATE USER ${db_name}_user WITH 
+                -- User doesn't exist, create it
+                CREATE USER ${db_name}_user WITH
                     PASSWORD '$rw_password'
                     CONNECTION LIMIT 50;
-                
+
                 GRANT ${db_name}_readwrite TO ${db_name}_user;
                 GRANT CONNECT ON DATABASE $db_name TO ${db_name}_user;
-                
+
                 COMMENT ON ROLE ${db_name}_user IS 'Read-write user for $db_name database';
+            ELSE
+                -- User exists (from restore), update password
+                ALTER USER ${db_name}_user WITH PASSWORD '$rw_password';
             END IF;
         END
         \$\$;
-        
+
         -- Read-only user
         DO \$\$
         BEGIN
             IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${db_name}_readonly_user') THEN
-                CREATE USER ${db_name}_readonly_user WITH 
+                -- User doesn't exist, create it
+                CREATE USER ${db_name}_readonly_user WITH
                     PASSWORD '$ro_password'
                     CONNECTION LIMIT 20;
-                
+
                 GRANT ${db_name}_readonly TO ${db_name}_readonly_user;
                 GRANT CONNECT ON DATABASE $db_name TO ${db_name}_readonly_user;
-                
+
                 COMMENT ON ROLE ${db_name}_readonly_user IS 'Read-only user for $db_name database';
+            ELSE
+                -- User exists (from restore), update password
+                ALTER USER ${db_name}_readonly_user WITH PASSWORD '$ro_password';
             END IF;
         END
         \$\$;
 EOSQL
 
-  log_success "Users created"
+  log_success "Users created/updated"
 }
 
 _apply_security() {
