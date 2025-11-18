@@ -1,6 +1,5 @@
 import { Pool } from 'pg'
 
-// 使用 DATABASE_URL 创建连接池
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 20,

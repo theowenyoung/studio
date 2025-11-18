@@ -1,0 +1,6 @@
+services:
+  redis:
+    # 生产环境：不暴露端口到宿主机
+    # 只允许 Docker 内部网络访问
+    ports: []
+    restart: always

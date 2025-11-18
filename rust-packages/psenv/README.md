@@ -39,7 +39,7 @@ psenv --template .env.example --prefix "/studio-dev/" --output .env
   - `overwrite`: Completely overwrite the file with only the fetched values
   - `error`: Error if output file exists
 - `--ignore-keys` / `-i`: Skip these keys (comma-separated, e.g., `DB_HOST,DEBUG`)
-- `--require-all`: All keys must exist in Parameter Store, otherwise error (default: false)
+- `--require-all`: All keys must exist in Parameter Store, otherwise error (default: true)
 - `--region` / `-r`: AWS region
 - `--profile`: AWS profile
 - `--dry-run`: Preview mode - show what would be written without creating files

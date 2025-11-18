@@ -38,7 +38,7 @@ struct Cli {
     #[arg(help = "Skip these keys (comma-separated)")]
     ignore_keys: Option<String>,
 
-    #[arg(long, default_value = "false")]
+    #[arg(long, default_value = "true")]
     #[arg(help = "All keys must exist, otherwise error")]
     require_all: bool,
 

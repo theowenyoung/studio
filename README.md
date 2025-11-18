@@ -37,6 +37,10 @@ docker network create shared
 # 启动 service，比如postgres, redis, caddy
 mise run up
 
+# 创建数据库和用户
+
+mise run db:init
+
 # 启动特定应用，或者全部应用
 
 mise run dev:hono

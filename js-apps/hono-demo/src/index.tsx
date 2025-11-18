@@ -1,4 +1,4 @@
-import { serve } from '@hono/node-server'
+import 'dotenv/config' // 在最顶部导入
 import { Hono } from 'hono'
 import { Page } from './pages/page'
 import { Top } from './pages/top'

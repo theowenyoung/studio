@@ -79,7 +79,7 @@
 
     - name: Create shared Docker network for all services
       community.docker.docker_network:
-        name: shared_network
+        name: shared
         driver: bridge
         ipam_config:
           - subnet: "172.30.0.0/16"

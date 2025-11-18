@@ -14,6 +14,7 @@
   "dependencies": {
     "@hono/node-server": "^1.19.5",
     "@types/pg": "^8.15.6",
+    "dotenv": "^17.2.3",
     "hono": "^4.10.3",
     "node-pg-migrate": "^8.0.3",
     "pg": "^8.16.3",

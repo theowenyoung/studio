@@ -22,41 +22,6 @@ services:
     networks:
       - shared
 
-  postgres-backup:
-    image: prodrigestivill/postgres-backup-local:18
-    restart: unless-stopped
-    user: postgres:postgres  # 避免权限问题
-    env_file:
-      - .env
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_DB:  postgres
-      POSTGRES_USER: postgres
-      POSTGRES_EXTRA_OPTS: -Z9 --schema=public --blobs
-      SCHEDULE: "@daily"
-      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-7}
-      BACKUP_KEEP_WEEKS: ${BACKUP_KEEP_WEEKS:-4}
-      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-6}
-      HEALTHCHECK_PORT: 8080
-      TZ: UTC
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1"]
-      interval: 5m
-      timeout: 10s
-      retries: 3
-      start_period: 1m
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    volumes:
-      - ./.local/backups:/backups:delegated  # 备份到本地
-    networks:
-      - shared
-    depends_on:
-      postgres:
-        condition: service_healthy
 volumes:
   postgres_data:  # 定义命名卷
 networks:

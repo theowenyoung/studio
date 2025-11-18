@@ -1,5 +1,6 @@
 import { createClient } from 'redis'
 
+console.log("process.env.REDIS_URL", process.env.REDIS_URL)
 // 创建 Redis 客户端
 export const redisClient = createClient({
   url: process.env.REDIS_URL || 'redis://localhost:6379',

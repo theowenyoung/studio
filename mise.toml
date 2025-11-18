@@ -29,15 +29,43 @@ test = 'pnpm --filter "./js-apps/*" test'
 "up:redis" = 'cd infra-apps/redis && docker compose up'
 "down:redis" = 'cd infra-apps/redis && docker compose down'
 "build:psenv" = 'cd rust-packages/psenv && cargo build --release'
+"release:psenv" = 'cd rust-packages/psenv && cargo publish'
 "env:postgres" = 'cd infra-apps/postgres && psenv -t .env.example -p "/studio-dev/" -o .env'
 "env:redis" = 'cd infra-apps/redis && psenv -t .env.example -p "/studio-dev/" -o .env'
 "env:hono" = 'cd js-apps/hono-demo && psenv -t .env.example -p "/studio-dev/" -o .env'
 "env:backup" = 'cd infra-apps/backup && psenv -t .env.example -p "/studio-dev/" -o .env'
+"env:admin" = 'cd infra-apps/db-admin && psenv -t .env.example -p "/studio-dev/" -o .env'
 "db:admin:migrations" = "cd infra-apps/db-admin && docker compose run --rm db-admin"
 "db" = "cd infra-apps/postgres && docker compose exec postgres psql -U postgres"
+"migrate:hono" = 'pnpm --filter "./js-apps/hono-demo" migrate'
 "migrate" = 'pnpm --filter "./js-apps/*" migrate'
 "install" = 'pnpm --filter "./js-apps/*" install'
 serve = 'pnpm --filter "./js-apps/*" start'
+# 备份
+"dev:backup" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/backup-all.sh'
+"build:backup" = 'cd infra-apps/backup && docker compose build'
+"backup:list" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/list-backups.sh'
+
+# 恢复 - 本地
+"restore:postgres:latest" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-local.sh latest'
+"restore:postgres:file" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-local.sh'
+
+# 恢复 - S3
+"restore:postgres:s3:list" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/list-s3-postgres.sh'
+"restore:postgres:s3:latest" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh latest'
+"restore:postgres:s3:file" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh'
+
+# 清理
+"clean:postgres:soft" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/clean-postgres.sh'
+"clean:postgres:hard" = 'cd infra-apps/postgres && docker compose down -v'
+"clean:s3:smart" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/cleanup-s3-smart.sh'
+
+[tasks.addjs]
+usage = '''
+arg "<project>"
+arg "[packages]" var=#true
+'''
+run = 'pnpm --filter "./js-apps/${usage_project?}" add ${usage_packages?}'
 
 
 [tasks.init]
@@ -46,7 +74,7 @@ depends = ["init:network"]
 [tasks.up]
 depends = ["up:postgres", "up:caddy", "up:redis"]
 
-[tasks."db:admin"]
+[tasks."db:init"]
 depends = ["db:admin:migrations"]
 
 
@@ -54,4 +82,4 @@ depends = ["db:admin:migrations"]
 depends = ["down:postgres", "down:caddy", "down:redis"]
 
 [tasks.env]
-depends = ["env:postgres","env:redis","env:hono","env:backup"]
+depends = ["env:postgres","env:redis","env:hono","env:backup","env:admin"]
