@@ -1,5 +1,5 @@
 # SSG 通用配置片段
-# 使用方式：import snippets/ssg-common.caddy {args.root_path}
+# 使用方式：import ../snippets/ssg-common.caddy {args.root_path}
 
 # 参数：{args[0]} = root 路径，如 /srv/studio/ssg-apps/storefront/current
 
@@ -8,20 +8,36 @@ root * {args[0]}
 # SPA 路由支持
 try_files {path} {path}/ /index.html
 
-# 静态资源缓存（1年）
+# 静态资源长缓存（1年）
 @static {
-    path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot *.webp *.avif
+    path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot *.webp *.avif *.mp4 *.webm *.wasm
 }
 header @static {
     Cache-Control "public, max-age=31536000, immutable"
 }
 
-# HTML 不缓存
+# HTML 短缓存（5分钟）- 平衡性能和更新速度
 @html {
     path *.html /
 }
 header @html {
-    Cache-Control "public, max-age=0, must-revalidate"
+    Cache-Control "public, max-age=30, must-revalidate"
+}
+
+# JSON/XML 数据文件短缓存
+@data {
+    path *.json *.xml *.rss
+}
+header @data {
+    Cache-Control "public, max-age=30"
+}
+
+# Service Worker 和 Manifest 不缓存
+@pwa {
+    path /sw.js /service-worker.js /manifest.json /manifest.webmanifest
+}
+header @pwa {
+    Cache-Control "no-cache, no-store, must-revalidate"
 }
 
 # 安全头
@@ -30,10 +46,13 @@ header {
     X-Content-Type-Options "nosniff"
     Referrer-Policy "strict-origin-when-cross-origin"
     Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+    -Server  # 隐藏服务器信息
 }
 
-# Gzip 压缩
-encode gzip zstd
+# 压缩（优先 zstd，其次 gzip）
+encode zstd gzip
 
-# 文件服务
-file_server
+# 文件服务（启用预压缩文件支持）
+file_server {
+    precompressed zstd gzip br
+}

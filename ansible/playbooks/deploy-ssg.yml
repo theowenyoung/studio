@@ -33,6 +33,15 @@
         mode: '0755'
       become_user: root
 
+    - name: Ensure ssg-apps directory exists
+      file:
+        path: /srv/studio/ssg-apps
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      become_user: root
+
     - name: Ensure service base directory exists
       file:
         path: "{{ remote_base }}"

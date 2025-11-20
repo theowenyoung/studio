@@ -15,15 +15,24 @@ IMAGE="$ECR_REGISTRY/studio/$SERVICE_NAME"
 build_and_push_image \
   "$IMAGE" \
   "$VERSION" \
-  "$SCRIPT_DIR/Dockerfile"
+  "infra-apps/backup/Dockerfile"
 
 # ===== 2. 准备部署目录 =====
 rm -rf "$SCRIPT_DIR/$DEPLOY_DIST"
 mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 
 # ===== 3. 获取运行时环境变量 =====
-echo "🔐 Fetching environment variables from AWS Parameter Store..."
-psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
+if psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env" 2>/dev/null; then
+  echo "✅ Fetched environment variables from AWS Parameter Store"
+else
+  echo "⚠️  Failed to fetch from Parameter Store, using local .env file"
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    cp "$SCRIPT_DIR/.env" "$SCRIPT_DIR/$DEPLOY_DIST/.env"
+  else
+    echo "❌ Error: No .env file found and Parameter Store fetch failed"
+    exit 1
+  fi
+fi
 
 # ===== 4. 生成 docker-compose.yml =====
 export IMAGE_TAG="$IMAGE:$VERSION"

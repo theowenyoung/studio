@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
-SERVICE_NAME="storefront"
+SERVICE_NAME="blog"
 VERSION="$(get_version)"
 
 echo "🔨 Building SSG: $SERVICE_NAME (version: $VERSION)"

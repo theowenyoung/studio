@@ -6,6 +6,24 @@
     log {
         level INFO
         output stdout
+        format json
+    }
+
+    # 性能优化
+    servers {
+        # 协议优化（启用 HTTP/3）
+        protocols h1 h2 h3
+
+        # 连接超时
+        timeouts {
+            read_body   30s
+            read_header 30s
+            write       30s
+            idle        5m
+        }
+
+        # 最大请求头大小（10MB）
+        max_header_size 10MB
     }
 }
 

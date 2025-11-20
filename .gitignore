@@ -4,6 +4,7 @@ target
 *.log
 .next
 dist
+out
 dist-ssr
 *.local
 .env

@@ -19,12 +19,12 @@ RUN apk add --no-cache \
 # 创建备份目录
 RUN mkdir -p /backups/postgres /backups/redis
 
-# 复制备份脚本
-COPY scripts/ /usr/local/bin/
+# 复制备份脚本（从 repo root 的相对路径）
+COPY infra-apps/backup/scripts/ /usr/local/bin/
 RUN chmod +x /usr/local/bin/*.sh
 
-# 复制入口脚本
-COPY entrypoint.sh /entrypoint.sh
+# 复制入口脚本（从 repo root 的相对路径）
+COPY infra-apps/backup/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # 创建日志目录

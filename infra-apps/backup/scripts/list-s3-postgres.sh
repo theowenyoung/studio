@@ -21,12 +21,19 @@ AWS_ARGS=""
 [ -n "$S3_ENDPOINT" ] && AWS_ARGS="$AWS_ARGS --endpoint-url $S3_ENDPOINT"
 [ -n "$S3_REGION" ] && AWS_ARGS="$AWS_ARGS --region $S3_REGION"
 
-echo "Bucket: s3://${S3_BUCKET}/postgres/"
+# 使用环境前缀（如果设置）
+ENV_PREFIX=""
+if [ -n "$ENVIRONMENT" ]; then
+    ENV_PREFIX="${ENVIRONMENT}/"
+    echo "Environment: $ENVIRONMENT"
+fi
+
+echo "Bucket: s3://${S3_BUCKET}/${ENV_PREFIX}postgres/"
 echo ""
 
 # 列出所有日期目录
 echo "Available backup dates:"
-DATES=$(aws s3 ls "s3://${S3_BUCKET}/postgres/" $AWS_ARGS | grep "PRE" | awk '{print $2}' | sed 's/\///' | sort -r)
+DATES=$(aws s3 ls "s3://${S3_BUCKET}/${ENV_PREFIX}postgres/" $AWS_ARGS | grep "PRE" | awk '{print $2}' | sed 's/\///' | sort -r)
 
 if [ -z "$DATES" ]; then
     echo "  No backups found"

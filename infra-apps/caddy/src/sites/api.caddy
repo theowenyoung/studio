@@ -1,11 +1,4 @@
 # API 后端服务配置
 api-demo.owenyoung.com {
-    reverse_proxy hono-demo:8001
-
-    encode gzip
-
-    header {
-        X-Frame-Options "DENY"
-        X-Content-Type-Options "nosniff"
-    }
+    import ../snippets/proxy-common.caddy hono-demo:8001
 }
