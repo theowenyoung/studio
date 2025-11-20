@@ -3,10 +3,11 @@
   hosts: all
   become: yes
   become_user: deploy
+  gather_facts: no
 
   vars:
     service_name: "{{ service_name }}"
-    local_dist: "../infra-apps/{{ service_name }}/deploy-dist"
+    local_dist: "{{ playbook_dir }}/../../infra-apps/{{ service_name }}/deploy-dist"
     remote_base: "/srv/studio/infra-apps/{{ service_name }}"
 
   tasks:
@@ -14,6 +15,7 @@
       slurp:
         src: "{{ local_dist }}/version.txt"
       delegate_to: localhost
+      become: no  # 在本地读取文件，不需要 become
       register: version_file
 
     - name: Set version
@@ -22,6 +24,15 @@
 
     - debug:
         msg: "🚀 Deploying {{ service_name }} version {{ version }}"
+
+    - name: Ensure /srv/studio base directory exists
+      file:
+        path: /srv/studio
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      become_user: root
 
     - name: Ensure service base directory exists
       file:
@@ -61,6 +72,13 @@
         mode: '0755'
       when: service_name == 'backup'
 
+    - name: Login to ECR
+      shell: |
+        aws ecr get-login-password --region {{ ecr_region }} | \
+          docker login --username AWS --password-stdin {{ ecr_registry }}
+      environment:
+        AWS_DEFAULT_REGION: "{{ ecr_region }}"
+
     - name: Docker compose up
       shell: |
         cd {{ remote_base }}/current
@@ -68,6 +86,45 @@
       register: result
 
     - debug: var=result.stdout_lines
+
+    - name: Wait for container to be running
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
+      register: container_state
+      until: container_state.stdout == "running"
+      retries: 6
+      delay: 5
+      failed_when: false
+
+    - name: Check container health status
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.Health // empty' | head -1
+      register: health_status
+      failed_when: false
+
+    - name: Get container logs if not healthy
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose logs --tail=50 {{ service_name }}
+      register: container_logs
+      when: container_state.stdout != "running" or (health_status.stdout != "" and health_status.stdout != "healthy")
+
+    - name: Display container logs if there are issues
+      debug:
+        msg: "{{ container_logs.stdout_lines }}"
+      when: container_logs is defined and container_logs.stdout_lines is defined
+
+    - name: Fail if container is not running
+      fail:
+        msg: "❌ Container {{ service_name }} failed to start! Check logs above."
+      when: container_state.stdout != "running"
+
+    - name: Warn if container is unhealthy
+      debug:
+        msg: "⚠️ Warning: Container {{ service_name }} is running but unhealthy. Check logs above."
+      when: health_status.stdout != "" and health_status.stdout != "healthy" and container_state.stdout == "running"
 
     - name: Keep only latest 3 versions
       shell: |

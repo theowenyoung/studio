@@ -58,6 +58,9 @@ project/
 ```bash
 # 安装 Ansible Galaxy 依赖（首次运行）
 ansible-galaxy install -r ansible/requirements.yml
+
+# 安装 Python 依赖（用于 AWS Parameter Store 访问）
+pip install boto3
 ```
 
 这将安装以下社区角色：
@@ -91,13 +94,13 @@ mise run server-init
 
 ```bash
 # 一次性部署所有基础设施
-mise run deploy:infra
+mise run deploy-infra
 
 # 或分别部署
-mise run deploy:postgres
-mise run deploy:redis
-mise run deploy:caddy
-mise run deploy:backup
+mise run deploy-postgres
+mise run deploy-redis
+mise run deploy-caddy
+mise run deploy-backup
 ```
 
 ### 3. 部署应用
@@ -105,27 +108,27 @@ mise run deploy:backup
 #### 后端应用（Docker 容器）
 
 ```bash
-mise run deploy:hono
-mise run deploy:api
-mise run deploy:admin
+mise run deploy-hono
+mise run deploy-api
+mise run deploy-admin
 ```
 
 #### SSG 应用（静态文件）
 
 ```bash
-mise run deploy:storefront
-mise run deploy:blog
-mise run deploy:marketing
+mise run deploy-storefront
+mise run deploy-blog
+mise run deploy-marketing
 ```
 
 ### 4. 回滚
 
 ```bash
 # 后端应用回滚（零停机）
-mise run rollback:hono
+mise run rollback-hono
 
 # SSG 应用回滚（瞬间完成）
-mise run rollback:storefront
+mise run rollback-storefront
 ```
 
 ## 📦 服务分类
@@ -189,19 +192,19 @@ new-site.example.com {
 3. **添加 mise 任务**：编辑 `mise.toml`
 
 ```toml
-[tasks."build:new-site"]
+[tasks."build-new-site"]
 run = "bash js-apps/new-site/build.sh"
 
-[tasks."deploy:new-site"]
-depends = ["build:new-site"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/deploy-ssg.yml -e service_name=new-site"
+[tasks."deploy-new-site"]
+depends = ["build-new-site"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=new-site"
 ```
 
 4. **部署**
 
 ```bash
-mise run deploy:caddy      # 更新 Caddy 配置
-mise run deploy:new-site   # 部署新站点
+mise run deploy-caddy      # 更新 Caddy 配置
+mise run deploy-new-site   # 部署新站点
 ```
 
 ### 添加新的后端应用
@@ -212,7 +215,7 @@ mise run deploy:new-site   # 部署新站点
 
 3. **在 mise.toml 中添加任务**
 
-4. **部署**：`mise run deploy:new-app`
+4. **部署**：`mise run deploy-new-app`
 
 ## 🔧 版本管理
 
@@ -228,8 +231,8 @@ mise run deploy:new-site   # 部署新站点
 mise tasks
 
 # 构建但不部署
-mise run build:postgres
-mise run build:hono
+mise run build-postgres
+mise run build-hono
 
 # 查看服务器日志
 ssh deploy@your-server.com "cd /srv/studio/js-apps/hono-demo/current && docker compose logs -f"
@@ -307,3 +310,118 @@ docker compose ps
 - [Docker Rollout](https://github.com/Wowu/docker-rollout)
 - [Ansible 文档](https://docs.ansible.com/)
 - [mise 文档](https://mise.jdx.dev/)
+
+## 🔐 AWS 配置
+
+### 服务器 AWS 凭证配置
+
+部署应用需要从 ECR 拉取镜像，因此服务器需要配置 AWS 凭证。
+
+**本项目使用的方案：**
+
+AWS 凭证存储在 AWS Parameter Store，在服务器初始化时自动配置：
+
+1. **凭证存储位置**（已配置）：
+   - `/common/ECR_KEY_ID` - ECR 只读 IAM 用户的 Access Key ID
+   - `/common/ECR_KEY_SECRET` - ECR 只读 IAM 用户的 Secret Access Key
+
+2. **自动配置**：
+   ```bash
+   # 运行服务器初始化时自动配置
+   mise run server-init
+   ```
+
+3. **单独配置**（如果需要更新凭证）：
+   ```bash
+   # 仅配置 AWS 凭证
+   mise run server-configure-aws
+   ```
+
+**工作原理：**
+- Ansible 从 Parameter Store 读取凭证（`/common/ECR_KEY_ID` 和 `/common/ECR_KEY_SECRET`）
+- 自动配置到服务器 `~/.aws/credentials` 和 `~/.aws/config`
+- 所有 ECR 操作（`docker pull`、`aws ecr get-login-password`）自动使用这些凭证
+
+**优势：**
+- ✅ 凭证集中管理在 AWS Parameter Store
+- ✅ 自动化部署，无需手动配置
+- ✅ 最小权限（只读 ECR）
+- ✅ 凭证轮转只需更新 Parameter Store，重新运行 `server-configure-aws`
+
+---
+
+### 其他方案（可选）
+
+#### 方式 1：IAM Instance Role（仅适用于 EC2）
+
+如果服务器是 EC2 实例，可以使用 IAM Role：
+
+1. 创建 IAM Role，附加策略：`AmazonEC2ContainerRegistryReadOnly`
+2. 将 Role 附加到 EC2 实例
+3. 无需配置凭证，自动生效
+
+#### 方式 2：手动配置（不推荐）
+
+在服务器上手动配置 AWS 凭证：
+
+```bash
+ssh deploy@your-server
+aws configure
+```
+
+
+## 🔧 数据库管理
+
+### 运行数据库迁移
+
+在部署应用之前，先运行数据库迁移：
+
+```bash
+# 运行所有待执行的迁移
+mise run db-migrate
+```
+
+这个命令会：
+1. 从 Parameter Store 获取数据库凭证
+2. 同步迁移脚本到服务器
+3. 在服务器上运行 `db-admin` 容器执行迁移
+4. 自动退出
+
+**注意：** db-admin 是一次性任务，运行完成后容器会自动退出。
+
+---
+
+## 🔄 备份服务
+
+### 部署备份服务
+
+备份服务会定时备份 PostgreSQL 和 Redis：
+
+```bash
+# 构建并部署备份服务
+mise run deploy-backup
+```
+
+备份服务的调度：
+- PostgreSQL 备份：每天凌晨 2:00
+- Redis 备份：每天凌晨 3:00
+- 清理旧备份：每天凌晨 5:00
+- 完整备份：每周日凌晨 4:00
+
+备份位置：
+- 本地：`/data/backups/` (保留 7 天)
+- S3：配置的 S3 存储桶 (保留 90 天)
+
+### 手动触发备份
+
+```bash
+# SSH 到服务器
+ssh deploy@your-server
+
+# 手动运行 PostgreSQL 备份
+docker exec current-backup-1 /usr/local/bin/backup-postgres.sh
+
+# 手动运行 Redis 备份
+docker exec current-backup-1 /usr/local/bin/backup-redis.sh
+```
+

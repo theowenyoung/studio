@@ -40,7 +40,7 @@ test = 'pnpm --filter "./js-apps/*" test'
 serve = 'pnpm --filter "./js-apps/*" start'
 # 备份
 "dev-backup" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/backup-all.sh'
-"build-backup" = 'cd infra-apps/backup && docker compose build'
+"build-backup" = 'bash infra-apps/backup/build-prod.sh'
 "backup-list" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/list-backups.sh'
 
 # 恢复 - 本地
@@ -63,6 +63,14 @@ arg "<project>"
 arg "[packages]" var=#true
 '''
 run = 'pnpm --filter "./js-apps/${usage_project?}" add ${usage_packages?}'
+
+[tasks.buildjs]
+usage = '''
+arg "<project>"
+arg "[args]" var=#true
+'''
+run = 'pnpm --filter "./js-apps/${usage_project?}" ${usage_args?}'
+
 
 
 [tasks.init]
@@ -193,3 +201,26 @@ ansible all -i ansible/inventory.yml --become --become-user=deploy -m shell -a "
   ln -sfn \$PREV current
 "
 '''
+
+[tasks."server-configure-aws"]
+description = "Configure AWS credentials on server (for ECR access)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml"
+
+# ==================== 数据库管理 ====================
+[tasks."build-db-admin"]
+description = "Build db-admin (prepare migrations)"
+run = "bash infra-apps/db-admin/build.sh"
+
+[tasks."deploy-db-admin"]
+description = "Run database migrations in production"
+depends = ["build-db-admin"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-db-admin.yml"
+
+# ==================== 应用级迁移 ====================
+[tasks."deploy-migrate-hono"]
+description = "Run hono-demo database migrations only"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.yml -e service_name=hono-demo"
+
+[tasks."migrate-api"]
+description = "Run API database migrations only"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.yml -e service_name=api"

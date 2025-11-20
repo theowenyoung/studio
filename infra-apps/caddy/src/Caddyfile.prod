@@ -1,6 +1,6 @@
 {
     # 全局配置
-    email admin@example.com
+    email owen@owenyoung.com
 
     # 日志输出到 stdout，由 Docker logging driver 管理
     log {

@@ -1,5 +1,4 @@
-# API 后端服务配置
-api-demo.owenyoung.com {
+hono-demo.owenyoung.com {
     reverse_proxy hono-demo:8001
 
     encode gzip

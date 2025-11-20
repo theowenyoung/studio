@@ -13,10 +13,8 @@ rm -rf "$SCRIPT_DIR/$DEPLOY_DIST"
 mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 
 # 1. 获取环境变量
-fetch_env \
-  "$SCRIPT_DIR/.env.example" \
-  "/studio-prod/$SERVICE_NAME/" \
-  "$SCRIPT_DIR/$DEPLOY_DIST/.env"
+echo "🔐 Fetching environment variables from AWS Parameter Store..."
+psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 
 # 2. 复制 docker-compose 配置
 if [ -f "$SCRIPT_DIR/docker-compose.prod.yml" ]; then

@@ -4,10 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
-SERVICE_NAME="hono-demo"
-APP_PATH="js-apps/hono-demo"
-PORT="8001"
-START_CMD="node dist/server/index.js"
+SERVICE_NAME="backup"
 VERSION="$(get_version)"
 
 echo "🔨 Building $SERVICE_NAME (version: $VERSION)"
@@ -18,10 +15,7 @@ IMAGE="$ECR_REGISTRY/studio/$SERVICE_NAME"
 build_and_push_image \
   "$IMAGE" \
   "$VERSION" \
-  "docker/nodejs/Dockerfile" \
-  --build-arg APP_PATH="$APP_PATH" \
-  --build-arg EXPOSE_PORT="$PORT" \
-  --build-arg START_CMD="$START_CMD"
+  "$SCRIPT_DIR/Dockerfile"
 
 # ===== 2. 准备部署目录 =====
 rm -rf "$SCRIPT_DIR/$DEPLOY_DIST"
@@ -31,15 +25,15 @@ mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 echo "🔐 Fetching environment variables from AWS Parameter Store..."
 psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 
-# ===== 4. 生成 docker-compose.yml（使用模板 + envsubst） =====
+# ===== 4. 生成 docker-compose.yml =====
 export IMAGE_TAG="$IMAGE:$VERSION"
-export SERVICE_PORT="$PORT"
 
-if [ -f "$SCRIPT_DIR/templates/docker-compose.prod.yml" ]; then
-  envsubst < "$SCRIPT_DIR/templates/docker-compose.prod.yml" > "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
-else
-  cp "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
-fi
+# 使用生产配置
+cp "$SCRIPT_DIR/docker-compose.prod.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
+
+# 替换镜像标签
+sed -i.bak "s|image: backup:latest|image: $IMAGE_TAG|g" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
+rm "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml.bak"
 
 # ===== 5. 写入版本号 =====
 echo "$VERSION" > "$SCRIPT_DIR/$DEPLOY_DIST/version.txt"

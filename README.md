@@ -39,11 +39,11 @@ mise run up
 
 # 创建数据库和用户
 
-mise run db:init
+mise run db-init
 
 # 首次启动 hono 应用, 生成数据库表
 
-mise run migrate:hono
+mise run migrate-hono
 
 
 ```
@@ -54,9 +54,85 @@ mise run migrate:hono
 ```
 # 启动特定应用，或者全部应用
 
-mise run dev:hono
+mise run dev-hono
 
 # 启动所有应用
 make dev
 
 ```
+
+## 部署
+
+详细部署文档请查看 [DEPLOYMENT.md](./DEPLOYMENT.md)
+
+### 快速开始
+
+#### 0. 准备工作
+
+```bash
+# 安装 Ansible Galaxy 依赖（首次运行）
+ansible-galaxy install -r ansible/requirements.yml
+```
+
+#### 1. 初始化服务器
+
+```bash
+# 第一步：创建 deploy 用户（在本地执行）
+mise run server-init-user <server-ip>
+
+# 第二步：配置服务器环境（安全加固、Docker、数据盘挂载等）
+mise run server-init
+```
+
+#### 2. 部署基础设施
+
+```bash
+# 一次性部署所有基础设施（postgres, redis, caddy, backup）
+mise run deploy-infra
+
+# 或分别部署
+mise run deploy-postgres
+mise run deploy-redis
+mise run deploy-caddy
+```
+
+#### 3. 部署应用
+
+```bash
+# 后端应用（Docker 容器 + 零停机）
+mise run deploy-hono
+
+# SSG 应用（静态文件）
+mise run deploy-storefront
+```
+
+#### 4. 回滚
+
+```bash
+# 后端应用回滚到上一版本
+mise run rollback-hono
+
+# SSG 应用回滚
+mise run rollback-storefront
+```
+
+### 服务器目录结构
+
+```
+/srv/studio/
+├── infra-apps/          # 基础设施（postgres, redis, caddy）
+├── js-apps/             # 后端应用（hono-demo）
+└── ssg-apps/            # SSG 应用（storefront, blog）
+
+/data/
+├── docker/              # Docker volumes（自动管理）
+└── backups/             # 备份数据（deploy 用户可访问）
+```
+
+### 版本管理
+
+- 版本格式：`YYYYMMDDHHmmss`（如 `20251120174405`）
+- 自动保留最近 3 个版本
+- 快速回滚：切换软链接到上一版本
+
+

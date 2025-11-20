@@ -28,10 +28,8 @@ fi
 
 # 4. 获取环境变量（如果有）
 if [ -f "$SCRIPT_DIR/.env.example" ]; then
-  fetch_env \
-    "$SCRIPT_DIR/.env.example" \
-    "/studio-prod/$SERVICE_NAME/" \
-    "$SCRIPT_DIR/$DEPLOY_DIST/.env"
+  echo "🔐 Fetching environment variables from AWS Parameter Store..."
+  psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 fi
 
 # 5. 写入版本号

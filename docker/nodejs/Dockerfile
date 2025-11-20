@@ -31,34 +31,38 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # 再拷贝所有源码（最省心；如需更强缓存控制，可改成分阶段拷贝）
 COPY . .
 
-# 安装依赖（仅解析并安装目标子包及其依赖链）
-# 说明：--filter "<path>..." 会包含该子包及它依赖的内外部包
-RUN pnpm -w install --frozen-lockfile --filter "./${APP_PATH}..."
+# 安装依赖（会自动安装正确平台的可选依赖）
+RUN pnpm -w install --frozen-lockfile
 
 # 构建目标子包
 RUN pnpm -w --filter "./${APP_PATH}" run ${BUILD_SCRIPT}
 
 # 导出生产运行所需的独立产物（包含 node_modules、package.json、dist 等）
 # 需要 pnpm v8.15+/v9（corepack 通常会给到较新版本）
-RUN pnpm -w --filter "./${APP_PATH}" deploy --prod /out
+RUN pnpm --filter="./${APP_PATH}" deploy --prod /out
 
 # ---------- Runtime ----------
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# 启用 pnpm（用于运行迁移等任务）
+ENV PNPM_HOME=/usr/local/share/pnpm
+ENV PATH="${PNPM_HOME}:${PATH}"
+RUN corepack enable
+
 # 非 root 运行
 RUN addgroup --system --gid 1001 nodejs \
  && adduser  --system --uid 1001 appuser
 
-# 从 builder 导入“已裁剪的”产物
+# 从 builder 导入"已裁剪的"产物
 COPY --from=builder --chown=appuser:nodejs /out/ /app/
 
-# 暴露端口和启动命令做成可配置
+# 暴露端口
 ARG EXPOSE_PORT=3000
-ARG START_CMD="node dist/index.js"
 EXPOSE ${EXPOSE_PORT}
 
 USER appuser
-# 用 sh -lc 可让 START_CMD 是一整段命令（比如加环境变量/参数）
-CMD ["sh", "-lc", "${START_CMD}"]
+
+# 默认启动命令（会被 docker-compose.yml 的 command 覆盖）
+CMD ["node", "dist/server/index.js"]

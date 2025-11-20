@@ -10,11 +10,8 @@ VERSION="$(get_version)"
 echo "🔨 Building SSG: $SERVICE_NAME (version: $VERSION)"
 
 # ===== 1. 生成构建时环境变量 =====
-echo "📥 Fetching build-time env vars..."
-fetch_env \
-  "$SCRIPT_DIR/.env.example" \
-  "/studio-prod/$SERVICE_NAME/" \
-  "$SCRIPT_DIR/.env.production"
+echo "🔐 Fetching build-time environment variables from AWS Parameter Store..."
+psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/.env.production"
 
 # ===== 2. 本地构建静态文件 =====
 cd "$SCRIPT_DIR"
@@ -35,9 +32,9 @@ mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 cp -r "$SCRIPT_DIR/dist/." "$SCRIPT_DIR/$DEPLOY_DIST/"
 
 # ===== 4. 写入部署元信息 =====
-echo "$VERSION" > "$SCRIPT_DIR/$DEPLOY_DIST/version.txt"
+echo "$VERSION" >"$SCRIPT_DIR/$DEPLOY_DIST/version.txt"
 
-cat > "$SCRIPT_DIR/$DEPLOY_DIST/.deploy-meta" <<EOF
+cat >"$SCRIPT_DIR/$DEPLOY_DIST/.deploy-meta" <<EOF
 SERVICE_NAME=$SERVICE_NAME
 SERVICE_TYPE=ssg
 VERSION=$VERSION

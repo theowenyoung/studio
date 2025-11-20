@@ -1,20 +1,20 @@
 ---
-- name: Deploy SSG Application
+- name: Deploy DB Admin (Run Migrations)
   hosts: all
   become: yes
   become_user: deploy
 
   vars:
-    service_name: "{{ service_name }}"
-    local_dist: "{{ playbook_dir }}/../../js-apps/{{ service_name }}/deploy-dist"
-    remote_base: "/srv/studio/ssg-apps/{{ service_name }}"
+    service_name: "db-admin"
+    local_dist: "{{ playbook_dir }}/../../infra-apps/{{ service_name }}/deploy-dist"
+    remote_base: "/srv/studio/infra-apps/{{ service_name }}"
 
   tasks:
     - name: Read version
       slurp:
         src: "{{ local_dist }}/version.txt"
       delegate_to: localhost
-      become: no  # 在本地读取文件，不需要 become
+      become: no
       register: version_file
 
     - name: Set version
@@ -22,7 +22,7 @@
         version: "{{ version_file.content | b64decode | trim }}"
 
     - debug:
-        msg: "🚀 Deploying SSG {{ service_name }} version {{ version }}"
+        msg: "🚀 Running database migrations (version {{ version }})"
 
     - name: Ensure /srv/studio base directory exists
       file:
@@ -45,43 +45,41 @@
         state: directory
         mode: '0755'
 
-    - name: Sync static files
+    - name: Sync files
       synchronize:
         src: "{{ local_dist }}/"
         dest: "{{ remote_base }}/{{ version }}/"
-        delete: yes
+        delete: no
         rsync_opts:
-          - "--exclude=version.txt"
-          - "--exclude=.deploy-meta"
+          - "--exclude=.git"
 
-    - name: Copy metadata
-      synchronize:
-        src: "{{ local_dist }}/.deploy-meta"
-        dest: "{{ remote_base }}/{{ version }}/"
-
-    - name: Update current symlink (atomic operation)
+    - name: Update current symlink
       file:
         src: "{{ remote_base }}/{{ version }}"
         dest: "{{ remote_base }}/current"
         state: link
         force: yes
 
-    - name: Verify deployment
-      stat:
-        path: "{{ remote_base }}/current/index.html"
-      register: index_check
-      failed_when: not index_check.stat.exists
+    - name: Run migrations
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose up --abort-on-container-exit
+      register: result
 
-    - debug:
-        msg: "✅ {{ service_name }} deployed successfully ({{ version }})"
+    - name: Display migration output
+      debug:
+        var: result.stdout_lines
+
+    - name: Check migration status
+      fail:
+        msg: "Migration failed!"
+      when: result.rc != 0
+
+    - name: Success message
+      debug:
+        msg: "✅ Database migrations completed successfully"
 
     - name: Keep only latest 3 versions
       shell: |
         cd {{ remote_base }}
         ls -t | grep -E '^[0-9]{14}$' | tail -n +4 | xargs -r rm -rf
-
-    - name: Show disk usage
-      shell: du -sh {{ remote_base }}/*/
-      register: disk_usage
-
-    - debug: var=disk_usage.stdout_lines

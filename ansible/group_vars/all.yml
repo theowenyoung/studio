@@ -36,6 +36,9 @@ common_packages:
   - build-essential
   - pkg-config
 
+  # AWS 工具
+  - awscli
+
 # ==================== 防火墙配置 ====================
 # geerlingguy.firewall 角色使用的变量
 firewall_allowed_tcp_ports:
@@ -87,3 +90,8 @@ data_root: /data
 
 # 应用根目录
 app_root: /srv/studio
+
+# ==================== ECR 配置 ====================
+# AWS ECR 镜像仓库配置
+ecr_registry: "912951144733.dkr.ecr.us-west-2.amazonaws.com"
+ecr_region: "us-west-2"

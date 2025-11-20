@@ -17,13 +17,32 @@ ecr_login() {
     docker login --username AWS --password-stdin "$ECR_REGISTRY"
 }
 
+# ===== 确保 ECR 仓库存在 =====
+ensure_ecr_repo() {
+  local repo_name="$1"
+
+  echo "🔍 Checking if ECR repository exists: $repo_name"
+
+  if aws ecr describe-repositories --repository-names "$repo_name" --region "$ECR_REGION" >/dev/null 2>&1; then
+    echo "✅ Repository already exists: $repo_name"
+  else
+    echo "📦 Creating ECR repository: $repo_name"
+    aws ecr create-repository \
+      --repository-name "$repo_name" \
+      --region "$ECR_REGION" \
+      --image-scanning-configuration scanOnPush=true \
+      --encryption-configuration encryptionType=AES256
+    echo "✅ Repository created: $repo_name"
+  fi
+}
+
 # ===== 构建并推送 Docker 镜像 =====
 build_and_push_image() {
   local image_name="$1"
   local version="$2"
   local dockerfile="$3"
   shift 3
-  local build_args="$@"
+  # 剩余参数 "$@" 是 build args
 
   local repo_root
   repo_root="$(git rev-parse --show-toplevel)"
@@ -32,28 +51,21 @@ build_and_push_image() {
 
   echo "📦 Building: $image_name:$version"
   docker build \
+    --platform linux/amd64 \
     -f "$dockerfile" \
-    $build_args \
+    "$@" \
     -t "$image_name:latest" \
     -t "$image_name:$version" \
     .
 
   echo "📤 Pushing to ECR..."
   ecr_login
+
+  # 从镜像名称中提取仓库名（去掉 registry 前缀）
+  # 例如：912951144733.dkr.ecr.us-west-2.amazonaws.com/studio/hono-demo -> studio/hono-demo
+  local repo_name="${image_name#$ECR_REGISTRY/}"
+  ensure_ecr_repo "$repo_name"
+
   docker push "$image_name:latest"
   docker push "$image_name:$version"
-}
-
-# ===== 从 AWS Parameter Store 获取环境变量 =====
-fetch_env() {
-  local template="$1"
-  local param_path="$2"
-  local output="$3"
-
-  if command -v psenv &> /dev/null; then
-    psenv -t "$template" -p "$param_path" -o "$output"
-  else
-    echo "⚠️  psenv not found, copying template"
-    cp "$template" "$output"
-  fi
 }

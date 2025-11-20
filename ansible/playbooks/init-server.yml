@@ -56,7 +56,11 @@
 - import_playbook: setup-docker.yml
   tags: [docker-setup]
 
-# 6. 验证所有服务
+# 6. 配置 AWS 凭证（用于 ECR 镜像拉取）
+- import_playbook: configure-aws-credentials.yml
+  tags: [aws-credentials]
+
+# 7. 验证所有服务
 - name: Verify all services
   hosts: all
   become: yes
@@ -86,6 +90,7 @@
           - "  ✅ Docker 安装和配置"
           - "  ✅ 共享网络创建"
           - "  ✅ docker-rollout 工具"
+          - "  ✅ AWS 凭证配置 (ECR 访问)"
           - ""
           - "注意："
           - "  - 所有服务目录会在首次部署时自动创建"

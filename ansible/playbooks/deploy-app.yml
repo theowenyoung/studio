@@ -3,10 +3,11 @@
   hosts: all
   become: yes
   become_user: deploy
+  gather_facts: no
 
   vars:
     service_name: "{{ service_name }}"
-    local_dist: "../js-apps/{{ service_name }}/deploy-dist"
+    local_dist: "{{ playbook_dir }}/../../js-apps/{{ service_name }}/deploy-dist"
     remote_base: "/srv/studio/js-apps/{{ service_name }}"
 
   tasks:
@@ -14,6 +15,7 @@
       slurp:
         src: "{{ local_dist }}/version.txt"
       delegate_to: localhost
+      become: no  # 在本地读取文件，不需要 become
       register: version_file
 
     - name: Set version
@@ -22,6 +24,15 @@
 
     - debug:
         msg: "🚀 Deploying {{ service_name }} version {{ version }}"
+
+    - name: Ensure /srv/studio base directory exists
+      file:
+        path: /srv/studio
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      become_user: root
 
     - name: Ensure service base directory exists
       file:
@@ -50,16 +61,50 @@
         state: link
         force: yes
 
-    - name: Pull image
+    - name: Login to ECR and pull image
       shell: |
+        aws ecr get-login-password --region {{ ecr_region }} | \
+          docker login --username AWS --password-stdin {{ ecr_registry }}
         cd {{ remote_base }}/current
-        docker compose pull
+        docker compose pull --quiet
+      environment:
+        AWS_DEFAULT_REGION: "{{ ecr_region }}"
+      changed_when: false
 
-    - name: Zero-downtime deployment
+    - name: Check if migrations service exists
       shell: |
         cd {{ remote_base }}/current
-        docker-rollout -f docker-compose.yml
+        docker compose --profile migrate config --services 2>/dev/null | grep -q "{{ service_name }}-migrate"
+      register: has_migrations
+      failed_when: false
+      changed_when: false
+
+    - name: Run database migrations (if applicable)
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose --profile migrate run --rm {{ service_name }}-migrate
+      register: migrate_result
+      when: has_migrations.rc == 0
+
+    - name: Display migration output
+      debug:
+        msg: "{{ migrate_result.stdout_lines | default([]) }}"
+      when: has_migrations.rc == 0 and migrate_result.stdout_lines is defined
+
+    - name: Check if migrations failed
+      fail:
+        msg: "❌ Database migrations failed! Exit code: {{ migrate_result.rc }}"
+      when:
+        - has_migrations.rc == 0
+        - migrate_result.rc is defined
+        - migrate_result.rc != 0
+
+    - name: Deploy service (with downtime)
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose up -d
       register: result
+      # TODO: 配置 Traefik 后可以使用 docker-rollout 实现零停机部署
 
     - debug: var=result.stdout_lines
 
