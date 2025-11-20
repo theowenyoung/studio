@@ -2,8 +2,9 @@
 ---
 - name: Security Hardening
   hosts: all
+  become: yes
   gather_facts: yes
-  
+
   pre_tasks:
     # 安装 fail2ban 依赖包
     - name: Install fail2ban dependencies
@@ -26,7 +27,3 @@
     - role: geerlingguy.firewall
       tags: [firewall]
   
-  post_tasks:
-    - name: Verify security services
-      include_tasks: ../tasks/verify-services.yml
-      tags: [verify]

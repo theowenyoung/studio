@@ -1,0 +1,75 @@
+---
+- name: Deploy Infrastructure Service
+  hosts: all
+  become: yes
+  become_user: deploy
+
+  vars:
+    service_name: "{{ service_name }}"
+    local_dist: "../infra-apps/{{ service_name }}/deploy-dist"
+    remote_base: "/srv/studio/infra-apps/{{ service_name }}"
+
+  tasks:
+    - name: Read version
+      slurp:
+        src: "{{ local_dist }}/version.txt"
+      delegate_to: localhost
+      register: version_file
+
+    - name: Set version
+      set_fact:
+        version: "{{ version_file.content | b64decode | trim }}"
+
+    - debug:
+        msg: "🚀 Deploying {{ service_name }} version {{ version }}"
+
+    - name: Ensure service base directory exists
+      file:
+        path: "{{ remote_base }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create version directory
+      file:
+        path: "{{ remote_base }}/{{ version }}"
+        state: directory
+        mode: '0755'
+
+    - name: Sync files
+      synchronize:
+        src: "{{ local_dist }}/"
+        dest: "{{ remote_base }}/{{ version }}/"
+        delete: no
+        rsync_opts:
+          - "--exclude=.git"
+
+    - name: Update current symlink
+      file:
+        src: "{{ remote_base }}/{{ version }}"
+        dest: "{{ remote_base }}/current"
+        state: link
+        force: yes
+
+    - name: Create /data bind mount directories (for backup service)
+      become: yes
+      become_user: root
+      file:
+        path: /data/backups
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      when: service_name == 'backup'
+
+    - name: Docker compose up
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose up -d
+      register: result
+
+    - debug: var=result.stdout_lines
+
+    - name: Keep only latest 3 versions
+      shell: |
+        cd {{ remote_base }}
+        ls -t | grep -E '^[0-9]{14}$' | tail -n +4 | xargs -r rm -rf

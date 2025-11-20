@@ -4,177 +4,137 @@
   become: yes
   vars:
     data_mount_point: "/data"
-    
+
   tasks:
-    - name: Check current mount status
-      block:
-        - name: Check if mount point is already mounted
-          shell: |
-            if mountpoint -q "{{ data_mount_point }}"; then
-              echo "mounted"
-            elif [ -d "{{ data_mount_point }}" ]; then
-              echo "directory_exists"
-            else
-              echo "not_exists"
-            fi
-          register: mount_status
-          changed_when: false
-          failed_when: false
+    - name: Check if /data is already mounted
+      command: mountpoint -q "{{ data_mount_point }}"
+      register: already_mounted
+      failed_when: false
+      changed_when: false
 
-        - name: Show current status
-          debug:
-            msg: "Current mount status: {{ mount_status.stdout }}"
+    - name: Show mount status
+      debug:
+        msg: "{{ data_mount_point }} is already mounted, skipping setup"
+      when: already_mounted.rc == 0
 
-    - name: Setup mount if needed
+    - name: Setup mount
+      when: already_mounted.rc != 0
       block:
-        - name: Get all block devices info
-          command: lsblk -J -b -o NAME,SIZE,TYPE,MOUNTPOINT
-          register: block_devices_json
+        - name: Get all block devices
+          command: lsblk -J -b -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE
+          register: lsblk_output
           changed_when: false
 
-        - name: Find largest unmounted disk
+        - name: Parse devices
           set_fact:
-            data_disk: "/dev/{{ largest_unmounted_disk.name }}"
-            disk_size_gb: "{{ (largest_unmounted_disk.size | int / 1073741824) | round(1) }}"
-          vars:
-            all_devices: "{{ (block_devices_json.stdout | from_json).blockdevices }}"
-            unmounted_disks: >-
+            all_devices: "{{ (lsblk_output.stdout | from_json).blockdevices }}"
+
+        - name: Find data disk candidates
+          set_fact:
+            data_disk_candidates: >-
               {{
-                all_devices | 
+                all_devices |
                 selectattr('type', 'equalto', 'disk') |
-                selectattr('mountpoint', 'none') |
-                selectattr('children', 'undefined') |
+                rejectattr('name', 'match', '^(sr|loop).*') |
                 rejectattr('size', 'equalto', 0) |
-                sort(attribute='size', reverse=true) |
                 list
               }}
-            largest_unmounted_disk: "{{ unmounted_disks[0] }}"
-          when: 
-            - mount_status.stdout != "mounted"
-            - unmounted_disks | length > 0
 
-        - name: Show selected disk info
+        - name: Debug - Show candidates
           debug:
-            msg: "Selected disk: {{ data_disk }} ({{ disk_size_gb }}GB)"
-          when: data_disk is defined
+            msg: "{{ item.name }}: {{ (item.size | int / 1073741824) | round(1) }}GB, mounted at {{ item.mountpoint | default('(not mounted)') }}, fstype={{ item.fstype | default('none') }}"
+          loop: "{{ data_disk_candidates }}"
 
-        - name: Check if disk is already formatted with our label
-          command: blkid -L docker-data
-          register: labeled_disk_check
-          failed_when: false
-          changed_when: false
-          when: mount_status.stdout != "mounted"
+        - name: Find largest non-root disk
+          set_fact:
+            selected_disk: >-
+              {{
+                data_disk_candidates |
+                rejectattr('mountpoint', 'equalto', '/') |
+                rejectattr('children', 'undefined') |
+                reject('search', 'children.*mountpoint.*/', 'list') |
+                sort(attribute='size', reverse=true) |
+                first |
+                default(none)
+              }}
 
-        - name: Format disk with ext4 if needed
+        - name: If no disk without partitions, find largest non-root disk (may have mountpoint)
+          set_fact:
+            selected_disk: >-
+              {{
+                data_disk_candidates |
+                rejectattr('mountpoint', 'equalto', '/') |
+                reject('match', '.*sda.*') |
+                sort(attribute='size', reverse=true) |
+                first |
+                default(none)
+              }}
+          when: selected_disk is none or selected_disk == ''
+
+        - name: Fail if no suitable disk found
+          fail:
+            msg: |
+              No suitable data disk found.
+              Available disks: {{ data_disk_candidates | map(attribute='name') | list }}
+
+              Please manually specify the disk in inventory.yml:
+                production:
+                  hosts:
+                    your-server:
+                      data_disk: /dev/sdb
+          when: selected_disk is none or selected_disk == ''
+
+        - name: Set disk variables
+          set_fact:
+            data_disk: "/dev/{{ selected_disk.name }}"
+            disk_size_gb: "{{ (selected_disk.size | int / 1073741824) | round(1) }}"
+            has_fs: "{{ (selected_disk.fstype | default('')) != '' }}"
+            current_mountpoint: "{{ selected_disk.mountpoint | default('') }}"
+
+        - name: Show selected disk
+          debug:
+            msg: "Using disk {{ data_disk }} ({{ disk_size_gb }}GB, has filesystem: {{ has_fs }}, currently mounted: {{ current_mountpoint or 'no' }})"
+
+        - name: Unmount if currently mounted elsewhere
+          mount:
+            path: "{{ current_mountpoint }}"
+            state: unmounted
+          when: current_mountpoint != '' and current_mountpoint != data_mount_point
+
+        - name: Format disk if no filesystem
           filesystem:
             fstype: ext4
             dev: "{{ data_disk }}"
-            opts: -L docker-data
-          register: format_result
-          when: 
-            - data_disk is defined
-            - labeled_disk_check.rc != 0
-            - mount_status.stdout != "mounted"
+            force: no
+          when: not has_fs
 
-        - name: Create mount point directory
+        - name: Create mount point
           file:
             path: "{{ data_mount_point }}"
             state: directory
+            owner: "{{ deploy_user | default('deploy') }}"
+            group: "{{ deploy_user | default('deploy') }}"
             mode: '0755'
-          when: mount_status.stdout in ["not_exists", "directory_exists"]
+          # /data 属于 deploy，方便日常操作：
+          # 1. deploy 可以直接访问 /data/backups/ 等目录，无需 sudo
+          # 2. Docker daemon 会自己创建并管理 /data/docker/ (root:root)
+          # 3. 各自管理各自的子目录，不冲突
 
-        - name: Mount data disk
+        - name: Add to fstab and mount
           mount:
             path: "{{ data_mount_point }}"
-            src: "LABEL=docker-data"
+            src: "{{ data_disk }}"
             fstype: ext4
             opts: defaults,noatime
             state: mounted
-          register: mount_result
-          when: mount_status.stdout != "mounted"
 
-        - name: Set ownership of mount point
-          file:
-            path: "{{ data_mount_point }}"
-            owner: "{{ ansible_user }}"
-            group: "{{ ansible_user }}"
-            mode: '0755'
-          when: mount_status.stdout != "mounted"
-
-      rescue:
-        - name: Handle setup failure
-          debug:
-            msg: "❌ FAILED: Data storage mount setup failed. Error: {{ ansible_failed_result.msg | default('Unknown error') }}"
-          
-        - name: Show troubleshooting info
-          debug:
-            msg: |
-              Troubleshooting information:
-              - Check available disks: lsblk
-              - Check current mounts: df -h
-              - Check filesystem labels: blkid
-          
-        - name: Fail the task
-          fail:
-            msg: "Data storage mount setup failed"
-
-    - name: Verify mount and show final status
-      block:
-        - name: Check final mount status
+        - name: Verify mount
           command: df -h "{{ data_mount_point }}"
-          register: final_mount_status
+          register: df_output
           changed_when: false
 
-        - name: Ensure mount persists across reboots
-          lineinfile:
-            path: /etc/fstab
-            line: "LABEL=docker-data {{ data_mount_point }} ext4 defaults,noatime 0 2"
-            regexp: "^.*{{ data_mount_point }}.*$"
-            state: present
-            backup: yes
-          when: mount_status.stdout != "mounted"
-
-        - name: Test write permissions
-          file:
-            path: "{{ data_mount_point }}/.ansible-test"
-            state: touch
-            owner: "{{ ansible_user }}"
-          register: write_test
-          
-        - name: Clean up test file
-          file:
-            path: "{{ data_mount_point }}/.ansible-test"
-            state: absent
-          when: write_test is succeeded
-
-        - name: Show success message
+        - name: Show success
           debug:
             msg: |
-              ✅ SUCCESS: Data storage mount is ready!
-              
-              Mount Information:
-              {{ final_mount_status.stdout_lines | join('\n              ') }}
-              
-              Mount Point: {{ data_mount_point }}
-              Filesystem: ext4 with label 'docker-data'
-              Status: {% if mount_status.stdout == "mounted" %}Already mounted (no changes needed){% else %}Newly mounted{% endif %}
-
-      rescue:
-        - name: Show verification failure
-          debug:
-            msg: "⚠️  WARNING: Mount completed but verification failed. Manual check recommended."
-
-      when: data_disk is defined or mount_status.stdout == "mounted"
-
-    - name: Show failure message if no suitable disk found
-      debug:
-        msg: |
-          ❌ FAILED: No suitable unmounted disk found for data storage.
-          
-          Requirements:
-          - Block volume must be attached to VPS
-          - Volume must not be already mounted  
-          - Volume must be larger than 0 bytes
-          
-          Run 'lsblk' to check available disks.
-      when: data_disk is not defined and mount_status.stdout != "mounted"
+              ✅ Data disk mounted successfully!
+              {{ df_output.stdout_lines | join('\n              ') }}

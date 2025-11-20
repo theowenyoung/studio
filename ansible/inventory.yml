@@ -1,0 +1,6 @@
+all:
+  hosts:
+    production:
+      ansible_host: 5.78.126.18
+      ansible_user: deploy
+      ansible_python_interpreter: /usr/bin/python3

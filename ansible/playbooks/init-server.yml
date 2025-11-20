@@ -1,39 +1,98 @@
 ---
-- name: Init VPS
+# 服务器初始化主流程
+# 使用方式: ansible-playbook -i inventory.yml playbooks/init-server.yml
+
+# 1. 基础系统配置
+- name: Bootstrap system
   hosts: all
+  become: yes
   gather_facts: yes
-  
-  pre_tasks:
-    - name: Wait for system to be ready
-      include_tasks: ../tasks/wait-for-connection.yml
-  
+
   roles:
-    # 基础系统
     - role: robertdebock.bootstrap
       tags: [bootstrap]
-    
+
     - role: robertdebock.update
       tags: [update]
-    
-    # 用户管理
-    - role: robertdebock.users
-      tags: [users]
-    
-    # 基础工具
-    - role: geerlingguy.git
-      tags: [git]
-    
-    - role: geerlingguy.pip
-      tags: [pip]
-    
-    - role: geerlingguy.docker
-      tags: [docker]
-  
+
   post_tasks:
-    # 安装用户定义的基础包
+    # 安装常用工具包
     - name: Install common packages
-      package:
+      apt:
         name: "{{ common_packages }}"
         state: present
-      when: common_packages is defined
+        update_cache: yes
+        cache_valid_time: 3600  # 如果 apt 缓存在 1 小时内有效，跳过 update（节省时间）
+      when: common_packages is defined and common_packages | length > 0
       tags: [packages, common]
+
+# 2. 挂载数据盘
+- import_playbook: mount.yml
+  tags: [mount]
+
+# 3. 安全加固（在 Docker 之前配置 UFW）
+- import_playbook: security.yml
+  tags: [security]
+
+# 4. 安装 Docker（在 UFW 之后安装，Docker 会在已有防火墙基础上配置）
+- name: Install Docker
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - role: geerlingguy.docker
+      tags: [docker]
+
+  post_tasks:
+    - name: Add deploy user to docker group
+      user:
+        name: "{{ deploy_user | default('deploy') }}"
+        groups: docker
+        append: yes
+      tags: [docker]
+
+# 5. 配置 Docker（数据目录、网络等）
+- import_playbook: setup-docker.yml
+  tags: [docker-setup]
+
+# 6. 验证所有服务
+- name: Verify all services
+  hosts: all
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Verify services are running
+      include_tasks: ../tasks/verify-services.yml
+      tags: [verify, always]
+
+# 7. 显示完成信息
+- name: Show completion message
+  hosts: all
+  gather_facts: no
+
+  tasks:
+    - name: Display success message
+      debug:
+        msg:
+          - "🎉 服务器初始化完成！"
+          - ""
+          - "已完成的配置:"
+          - "  ✅ 系统更新和基础配置"
+          - "  ✅ 常用工具包安装"
+          - "  ✅ 数据盘挂载 (/data)"
+          - "  ✅ 安全加固 (SSH, 防火墙, Fail2ban)"
+          - "  ✅ Docker 安装和配置"
+          - "  ✅ 共享网络创建"
+          - "  ✅ docker-rollout 工具"
+          - ""
+          - "注意："
+          - "  - 所有服务目录会在首次部署时自动创建"
+          - "  - Docker 在 UFW 之后安装，可正确处理 iptables"
+          - ""
+          - "下一步："
+          - "  mise run deploy-postgres"
+          - "  mise run deploy-redis"
+          - "  mise run deploy-caddy"
+      tags: [always]

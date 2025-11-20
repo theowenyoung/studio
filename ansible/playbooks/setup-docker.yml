@@ -1,13 +1,4 @@
 ---
-- name: Setup Docker
-  hosts: all
-  gather_facts: yes
-  
-  pre_tasks:
-    - name: Include wait for connection
-      include_tasks: ../tasks/wait-for-connection.yml
-      tags: [always]
-  
 # =====================================
 # Docker 环境和工具准备
 # =====================================
@@ -57,25 +48,28 @@
             "storage-driver": "overlay2"
           }
         mode: '0644'
+      register: docker_config
       tags: [docker-config]
+
+    - name: Restart Docker if config changed
+      systemd:
+        name: docker
+        state: restarted
+        daemon_reload: yes
+      when: docker_config.changed
+      tags: [docker-config, docker-service]
 
     - name: Ensure Docker daemon is running
       systemd:
         name: docker
         state: started
         enabled: yes
-    
-    # 添加这个步骤：重启 Docker 确保 iptables 链正确
-    - name: Restart Docker to ensure iptables chains are properly set up
-      systemd:
-        name: docker
-        state: restarted
-      tags: [network, docker-restart]
-    
-    - name: Wait for Docker to be fully ready
+      tags: [docker-service]
+
+    - name: Wait for Docker to be ready
       pause:
-        seconds: 10
-      tags: [network]
+        seconds: 5
+      tags: [docker-service]
 
     - name: Create shared Docker network for all services
       community.docker.docker_network:

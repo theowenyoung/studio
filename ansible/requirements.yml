@@ -1,0 +1,43 @@
+---
+# Ansible Galaxy 依赖
+# 安装方式: ansible-galaxy install -r requirements.yml
+
+roles:
+  # 系统基础配置
+  - name: robertdebock.bootstrap
+    version: "6.3.3"
+
+  - name: robertdebock.update
+    version: "2.2.3"
+
+  - name: robertdebock.users
+    version: "3.3.3"
+
+  # 开发工具
+  - name: geerlingguy.git
+    version: "3.0.0"
+
+  - name: geerlingguy.pip
+    version: "3.0.1"
+
+  # Docker
+  - name: geerlingguy.docker
+    version: "7.4.1"
+
+  # SSH 配置
+  - name: willshersystems.sshd
+    version: "1.6.1"
+
+  # 安全加固
+  - name: geerlingguy.security
+    version: "3.0.0"
+
+  - name: geerlingguy.firewall
+    version: "3.2.0"
+
+collections:
+  - name: community.general
+    version: ">=8.0.0"
+
+  - name: community.docker
+    version: ">=3.0.0"

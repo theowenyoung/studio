@@ -1,0 +1,4 @@
+# Blog 站点配置
+blog.example.com {
+    import snippets/ssg-common.caddy /srv/studio/ssg-apps/blog/current
+}

@@ -1,21 +1,25 @@
 version: '3.8'
 
 services:
-  redis:
-    image: redis:7-alpine
+  postgres:
+    image: postgres:18-alpine
     restart: unless-stopped
     env_file: .env
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    environment:
+      POSTGRES_USER: postgres
     ports:
-      - "6379:6379"
+      - "5432:5432"
     volumes:
-      - redis_data:/data
+      - ./initdb.d:/docker-entrypoint-initdb.d:ro
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
     networks:
       - shared
     logging:
@@ -25,7 +29,7 @@ services:
         max-file: "3"
 
 volumes:
-  redis_data:
+  postgres_data:
     # Docker 管理的 volume，数据存储在 /data/docker/volumes/ (因为 data-root=/data/docker)
 
 networks:

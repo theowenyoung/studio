@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
-SERVICE_NAME="postgres"
+SERVICE_NAME="redis"
 VERSION="$(get_version)"
 
 echo "🔨 Building $SERVICE_NAME (version: $VERSION)"
@@ -25,9 +25,10 @@ else
   cp "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
 fi
 
-# 3. 复制配置文件
-cp "$SCRIPT_DIR/postgresql.conf" "$SCRIPT_DIR/$DEPLOY_DIST/"
-cp -r "$SCRIPT_DIR/initdb.d" "$SCRIPT_DIR/$DEPLOY_DIST/"
+# 3. 复制配置文件（如果有）
+if [ -f "$SCRIPT_DIR/redis.conf" ]; then
+  cp "$SCRIPT_DIR/redis.conf" "$SCRIPT_DIR/$DEPLOY_DIST/"
+fi
 
 # 4. 写入版本号
 echo "$VERSION" > "$SCRIPT_DIR/$DEPLOY_DIST/version.txt"

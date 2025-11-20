@@ -1,0 +1,13 @@
+{
+    # 全局配置
+    email admin@example.com
+
+    # 日志输出到 stdout，由 Docker logging driver 管理
+    log {
+        level INFO
+        output stdout
+    }
+}
+
+# 导入所有站点配置
+import sites/*.caddy

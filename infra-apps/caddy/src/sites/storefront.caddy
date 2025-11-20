@@ -1,0 +1,4 @@
+# Storefront 站点配置
+storefront.example.com {
+    import snippets/ssg-common.caddy /srv/studio/ssg-apps/storefront/current
+}

@@ -1,0 +1,77 @@
+---
+- name: Deploy SSG Application
+  hosts: all
+  become: yes
+  become_user: deploy
+
+  vars:
+    service_name: "{{ service_name }}"
+    local_dist: "../js-apps/{{ service_name }}/deploy-dist"
+    remote_base: "/srv/studio/ssg-apps/{{ service_name }}"
+
+  tasks:
+    - name: Read version
+      slurp:
+        src: "{{ local_dist }}/version.txt"
+      delegate_to: localhost
+      register: version_file
+
+    - name: Set version
+      set_fact:
+        version: "{{ version_file.content | b64decode | trim }}"
+
+    - debug:
+        msg: "🚀 Deploying SSG {{ service_name }} version {{ version }}"
+
+    - name: Ensure service base directory exists
+      file:
+        path: "{{ remote_base }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create version directory
+      file:
+        path: "{{ remote_base }}/{{ version }}"
+        state: directory
+        mode: '0755'
+
+    - name: Sync static files
+      synchronize:
+        src: "{{ local_dist }}/"
+        dest: "{{ remote_base }}/{{ version }}/"
+        delete: yes
+        rsync_opts:
+          - "--exclude=version.txt"
+          - "--exclude=.deploy-meta"
+
+    - name: Copy metadata
+      synchronize:
+        src: "{{ local_dist }}/.deploy-meta"
+        dest: "{{ remote_base }}/{{ version }}/"
+
+    - name: Update current symlink (atomic operation)
+      file:
+        src: "{{ remote_base }}/{{ version }}"
+        dest: "{{ remote_base }}/current"
+        state: link
+        force: yes
+
+    - name: Verify deployment
+      stat:
+        path: "{{ remote_base }}/current/index.html"
+      register: index_check
+      failed_when: not index_check.stat.exists
+
+    - debug:
+        msg: "✅ {{ service_name }} deployed successfully ({{ version }})"
+
+    - name: Keep only latest 3 versions
+      shell: |
+        cd {{ remote_base }}
+        ls -t | grep -E '^[0-9]{14}$' | tail -n +4 | xargs -r rm -rf
+
+    - name: Show disk usage
+      shell: du -sh {{ remote_base }}/*/
+      register: disk_usage
+
+    - debug: var=disk_usage.stdout_lines

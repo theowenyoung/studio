@@ -19,7 +19,7 @@
 # brew 安装 mkcert 本地证书管理工具
 brew install mkcert
 
-# 安装 mkcert 的证书到本地系统，并且信任它。
+# 安装 mkcert 的证书到本地系统，并且c信任它。
 mkcert -install
 
 # 生成本地域名证书
@@ -41,6 +41,17 @@ mise run up
 
 mise run db:init
 
+# 首次启动 hono 应用, 生成数据库表
+
+mise run migrate:hono
+
+
+```
+
+### 开始开发
+
+
+```
 # 启动特定应用，或者全部应用
 
 mise run dev:hono
@@ -49,4 +60,3 @@ mise run dev:hono
 make dev
 
 ```
-
