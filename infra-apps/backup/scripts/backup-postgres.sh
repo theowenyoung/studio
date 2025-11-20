@@ -5,7 +5,11 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 DATE=$(date +%Y%m%d)
 FILE="postgres-all-${TIMESTAMP}.sql.gz"
 LOCAL_PATH="/backups/postgres/${FILE}"
-S3_PATH="s3://${S3_BUCKET}/postgres/${DATE}/${FILE}"
+
+# 使用环境前缀（如果设置）
+ENV_PREFIX=""
+[ -n "$ENVIRONMENT" ] && ENV_PREFIX="${ENVIRONMENT}/"
+S3_PATH="s3://${S3_BUCKET}/${ENV_PREFIX}postgres/${DATE}/${FILE}"
 
 echo "[$(date)] Starting Postgres backup (all databases): ${FILE}"
 

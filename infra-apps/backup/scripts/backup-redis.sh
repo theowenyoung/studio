@@ -8,7 +8,11 @@ TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 DATE=$(date +%Y%m%d)
 FILE="redis-${TIMESTAMP}.rdb"
 LOCAL_PATH="/backups/redis/${FILE}"
-S3_PATH="s3://${S3_BUCKET}/redis/${DATE}/${FILE}"
+
+# 使用环境前缀（如果设置）
+ENV_PREFIX=""
+[ -n "$ENVIRONMENT" ] && ENV_PREFIX="${ENVIRONMENT}/"
+S3_PATH="s3://${S3_BUCKET}/${ENV_PREFIX}redis/${DATE}/${FILE}"
 
 echo "[$(date)] Starting Redis backup: ${FILE}"
 

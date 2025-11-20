@@ -20,32 +20,39 @@ AWS_ARGS=""
 [ -n "$S3_ENDPOINT" ] && AWS_ARGS="$AWS_ARGS --endpoint-url $S3_ENDPOINT"
 [ -n "$S3_REGION" ] && AWS_ARGS="$AWS_ARGS --region $S3_REGION"
 
+# 使用环境前缀（如果设置）
+ENV_PREFIX=""
+if [ -n "$ENVIRONMENT" ]; then
+    ENV_PREFIX="${ENVIRONMENT}/"
+    echo "[$(date)] Using environment: $ENVIRONMENT"
+fi
+
 # 如果是 latest，找最新的 S3 备份
 if [ "$S3_PATH" = "latest" ]; then
     echo "[$(date)] Finding latest backup from S3..."
-    
+
     # 列出所有日期目录，取最新的
-    LATEST_DATE=$(aws s3 ls "s3://${S3_BUCKET}/postgres/" $AWS_ARGS | grep "PRE" | awk '{print $2}' | sed 's/\///' | sort -r | head -1)
-    
+    LATEST_DATE=$(aws s3 ls "s3://${S3_BUCKET}/${ENV_PREFIX}postgres/" $AWS_ARGS | grep "PRE" | awk '{print $2}' | sed 's/\///' | sort -r | head -1)
+
     if [ -z "$LATEST_DATE" ]; then
         echo "[$(date)] ERROR: No backups found in S3"
         exit 1
     fi
-    
+
     # 找该日期下最新的备份文件
-    LATEST_FILE=$(aws s3 ls "s3://${S3_BUCKET}/postgres/${LATEST_DATE}/" $AWS_ARGS | grep "\.sql\.gz$" | sort -k1,2 -r | head -1 | awk '{print $4}')
-    
+    LATEST_FILE=$(aws s3 ls "s3://${S3_BUCKET}/${ENV_PREFIX}postgres/${LATEST_DATE}/" $AWS_ARGS | grep "\.sql\.gz$" | sort -k1,2 -r | head -1 | awk '{print $4}')
+
     if [ -z "$LATEST_FILE" ]; then
         echo "[$(date)] ERROR: No backup files found in S3 for date ${LATEST_DATE}"
         exit 1
     fi
-    
-    S3_PATH="s3://${S3_BUCKET}/postgres/${LATEST_DATE}/${LATEST_FILE}"
+
+    S3_PATH="s3://${S3_BUCKET}/${ENV_PREFIX}postgres/${LATEST_DATE}/${LATEST_FILE}"
     echo "[$(date)] Using latest S3 backup: $S3_PATH"
 else
     # 如果不是完整路径，补充前缀
     if [[ "$S3_PATH" != s3://* ]]; then
-        S3_PATH="s3://${S3_BUCKET}/postgres/${S3_PATH}"
+        S3_PATH="s3://${S3_BUCKET}/${ENV_PREFIX}postgres/${S3_PATH}"
     fi
 fi
 

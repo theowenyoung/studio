@@ -64,7 +64,7 @@ echo "$DATES" | head -10 | while read date; do
     fi
 
     echo "📅 $date $AGE_STR:"
-    aws s3 ls "s3://${S3_BUCKET}/postgres/${date}/" $AWS_ARGS | grep "\.sql\.gz$" | while read line; do
+    aws s3 ls "s3://${S3_BUCKET}/${ENV_PREFIX}postgres/${date}/" $AWS_ARGS | grep "\.sql\.gz$" | while read line; do
         DATE_TIME=$(echo "$line" | awk '{print $1, $2}')
         SIZE=$(echo "$line" | awk '{print $3}')
         FILE=$(echo "$line" | awk '{print $4}')

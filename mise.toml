@@ -49,6 +49,7 @@ serve = 'pnpm --filter "./js-apps/*" start'
 
 # 恢复 - S3
 "restore-postgres-s3-list" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/list-s3-postgres.sh'
+"restore-postgres-s3-list-prod" = 'cd infra-apps/backup && docker compose run --rm -e ENVIRONMENT=prod backup /usr/local/bin/list-s3-postgres.sh'
 "restore-postgres-s3-latest" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh latest'
 "restore-postgres-s3-file" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh'
 
