@@ -5,93 +5,257 @@ bun = "latest"
 node = "latest"
 rust = "latest"
 "cargo:psenv" = "latest"
+
 [env]
 # AWS ECR registry
 ECR_REGISTRY = "912951144733.dkr.ecr.us-west-2.amazonaws.com"
 
-[tasks]
-# 初始化
-build = 'pnpm --filter "./js-apps/*" build'
-clean = 'pnpm --filter "./js-apps/*" clean'
-"dev-hono" = 'pnpm --filter "hono-demo" dev'
-dev = 'pnpm --filter "./js-apps/*" dev'
-format = 'prettier --write "**/*.{ts,tsx,md}"'
-lint = 'pnpm --filter "./js-apps/*" lint'
-test = 'pnpm --filter "./js-apps/*" test'
-"init-network" = 'docker network create shared'
-"up-postgres" = 'cd infra-apps/postgres && docker compose up'
-"down-postgres" = 'cd infra-apps/postgres && docker compose down'
-"up-caddy" = 'cd infra-apps/caddy && docker compose up'
-"down-caddy" = 'cd infra-apps/caddy && docker compose down'
-"up-redis" = 'cd infra-apps/redis && docker compose up'
-"down-redis" = 'cd infra-apps/redis && docker compose down'
-"build-psenv" = 'cd rust-packages/psenv && cargo build --release'
-"release-psenv" = 'cd rust-packages/psenv && cargo publish'
-"env-postgres" = 'cd infra-apps/postgres && psenv -t .env.example -p "/studio-dev/" -o .env'
-"env-redis" = 'cd infra-apps/redis && psenv -t .env.example -p "/studio-dev/" -o .env'
-"env-hono" = 'cd js-apps/hono-demo && psenv -t .env.example -p "/studio-dev/" -o .env'
-"env-backup" = 'cd infra-apps/backup && psenv -t .env.example -p "/studio-dev/" -o .env'
-"env-admin" = 'cd infra-apps/db-admin && psenv -t .env.example -p "/studio-dev/" -o .env'
-"db-admin-migrations" = "cd infra-apps/db-admin && docker compose run --rm db-admin"
-"db" = "cd infra-apps/postgres && docker compose exec postgres psql -U postgres"
-"migrate-hono" = 'pnpm --filter "./js-apps/hono-demo" migrate'
-"migrate" = 'pnpm --filter "./js-apps/*" migrate'
-"install" = 'pnpm --filter "./js-apps/*" install'
-serve = 'pnpm --filter "./js-apps/*" start'
-# 备份
-"dev-backup" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/backup-all.sh'
-"build-backup" = 'bash infra-apps/backup/build-prod.sh'
-"backup-list" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/list-backups.sh'
+# ==================== 开发相关 (dev-) ====================
+# 开发服务器 + 本地 Docker + 环境变量
 
-# 恢复 - 本地
-"restore-postgres-latest" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-local.sh latest'
-"restore-postgres-file" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-local.sh'
+[tasks.dev-hono]
+description = "Start hono-demo development server"
+run = 'pnpm --filter "hono-demo" dev'
 
-# 恢复 - S3
-"restore-postgres-s3-list" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/list-s3-postgres.sh'
-"restore-postgres-s3-list-prod" = 'cd infra-apps/backup && docker compose run --rm -e ENVIRONMENT=prod backup /usr/local/bin/list-s3-postgres.sh'
-"restore-postgres-s3-latest" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh latest'
-"restore-postgres-s3-file" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh'
+[tasks.dev-proxy]
+description = "Start proxy development server"
+run = 'pnpm --filter "proxy" dev'
 
-# 清理
-"clean-postgres-soft" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/clean-postgres.sh'
-"clean-postgres-hard" = 'cd infra-apps/postgres && docker compose down -v'
-"clean-s3-smart" = 'cd infra-apps/backup && docker compose run --rm backup /usr/local/bin/cleanup-s3-smart.sh'
+[tasks.dev-all]
+description = "Start all development servers"
+alias = "dev"
+run = 'pnpm --parallel --filter "./js-apps/*" dev'
 
-[tasks.addjs]
-usage = '''
-arg "<project>"
-arg "[packages]" var=#true
+[tasks.dev-init]
+description = "Initialize local environment (create Docker network)"
+alias = "init"
+run = 'docker network create shared'
+
+[tasks.dev-up]
+description = "Start all local infrastructure"
+alias = "up"
+depends = ["dev-up-postgres", "dev-up-redis", "dev-up-caddy"]
+
+[tasks.dev-down]
+description = "Stop all local infrastructure"
+alias = "down"
+depends = ["dev-down-postgres", "dev-down-redis", "dev-down-caddy"]
+
+[tasks.dev-logs]
+description = "View logs from all local infrastructure services"
+alias = "logs"
+run = '''
+echo "Starting log tail for postgres, redis, and caddy..."
+echo "Press Ctrl+C to stop"
+echo ""
+docker compose -f infra-apps/postgres/docker-compose.yml -f infra-apps/redis/docker-compose.yml -f infra-apps/caddy/docker-compose.yml logs -f --tail=50
 '''
-run = 'pnpm --filter "./js-apps/${usage_project?}" add ${usage_packages?}'
 
-[tasks.buildjs]
-usage = '''
-arg "<project>"
-arg "[args]" var=#true
-'''
-run = 'pnpm --filter "./js-apps/${usage_project?}" ${usage_args?}'
+[tasks.dev-logs-postgres]
+description = "View PostgreSQL logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/postgres"
 
+[tasks.dev-logs-redis]
+description = "View Redis logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/redis"
 
+[tasks.dev-logs-caddy]
+description = "View Caddy logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/caddy"
 
-[tasks.init]
-depends = ["init-network"]
+[tasks.dev-up-postgres]
+description = "Start local PostgreSQL"
+run = 'docker compose up -d'
+dir = "infra-apps/postgres"
 
-[tasks.up]
-depends = ["up-postgres", "up-caddy", "up-redis"]
+[tasks.dev-up-redis]
+description = "Start local Redis"
+run = 'docker compose up -d'
+dir = "infra-apps/redis"
 
-[tasks."db-init"]
-depends = ["db-admin-migrations"]
+[tasks.dev-up-caddy]
+description = "Start local Caddy"
+run = 'docker compose up -d'
+dir = "infra-apps/caddy"
 
+[tasks.dev-down-postgres]
+description = "Stop local PostgreSQL"
+run = 'docker compose down'
+dir = "infra-apps/postgres"
 
-[tasks.down]
-depends = ["down-postgres", "down-caddy", "down-redis"]
+[tasks.dev-down-redis]
+description = "Stop local Redis"
+run = 'docker compose down'
+dir = "infra-apps/redis"
 
-[tasks.env]
-depends = ["env-postgres","env-redis","env-hono","env-backup","env-admin"]
+[tasks.dev-down-caddy]
+description = "Stop local Caddy"
+run = 'docker compose down'
+dir = "infra-apps/caddy"
 
-# ==================== 服务器初始化 ====================
-[tasks."server-init-user"]
+[tasks.dev-env]
+description = "Fetch all development environment variables"
+alias = "env"
+depends = ["dev-env-postgres", "dev-env-redis", "dev-env-hono", "dev-env-backup", "dev-env-admin"]
+
+[tasks.dev-env-postgres]
+description = "Fetch PostgreSQL dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/postgres"
+
+[tasks.dev-env-redis]
+description = "Fetch Redis dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/redis"
+
+[tasks.dev-env-hono]
+description = "Fetch hono-demo dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "js-apps/hono-demo"
+
+[tasks.dev-env-backup]
+description = "Fetch backup dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/backup"
+
+[tasks.dev-env-admin]
+description = "Fetch db-admin dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/db-admin"
+
+[tasks.dev-backup]
+description = "Run backup in dev environment"
+run = 'docker compose run --rm backup /usr/local/bin/backup-all.sh'
+dir = "infra-apps/backup"
+
+# ==================== 数据库操作 (db-) ====================
+
+[tasks.db-connect]
+description = "Connect to PostgreSQL database"
+alias = "db"
+run = 'docker compose exec postgres psql -U postgres'
+dir = "infra-apps/postgres"
+
+[tasks.db-init]
+description = "Initialize database (run admin migrations)"
+run = "docker compose run --rm db-admin"
+dir = "infra-apps/db-admin"
+
+[tasks.db-migrate]
+description = "Run all application migrations"
+run = 'pnpm --filter "./js-apps/*" migrate'
+
+[tasks.db-migrate-hono]
+description = "Run hono-demo migrations"
+run = 'pnpm --filter "./js-apps/hono-demo" migrate'
+
+# ==================== 构建 (build-) ====================
+
+# 基础设施构建
+[tasks.build-infra-postgres]
+description = "Build PostgreSQL infrastructure"
+run = "bash infra-apps/postgres/build.sh"
+
+[tasks.build-infra-redis]
+description = "Build Redis infrastructure"
+run = "bash infra-apps/redis/build.sh"
+
+[tasks.build-infra-caddy]
+description = "Build Caddy infrastructure"
+run = "bash infra-apps/caddy/build.sh"
+
+[tasks.build-infra-backup]
+description = "Build backup infrastructure"
+run = "bash infra-apps/backup/build-prod.sh"
+
+# 应用构建
+[tasks.build-app-hono]
+description = "Build hono-demo application"
+run = "bash js-apps/hono-demo/build.sh"
+
+[tasks.build-app-proxy]
+description = "Build proxy application"
+run = "bash js-apps/proxy/build.sh"
+
+# SSG 构建
+[tasks.build-ssg-blog]
+description = "Build blog static site"
+run = "bash js-apps/blog/build.sh"
+
+[tasks.build-ssg-storefront]
+description = "Build storefront static site"
+run = "bash js-apps/storefront/build.sh"
+
+# ==================== 部署 (deploy-) ====================
+
+# 基础设施部署
+[tasks.deploy-infra]
+description = "Deploy all infrastructure services"
+depends = ["deploy-infra-postgres", "deploy-infra-redis", "deploy-infra-caddy", "deploy-infra-backup"]
+
+[tasks.deploy-infra-postgres]
+description = "Deploy PostgreSQL to production"
+depends = ["build-infra-postgres"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=postgres"
+
+[tasks.deploy-infra-redis]
+description = "Deploy Redis to production"
+depends = ["build-infra-redis"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=redis"
+
+[tasks.deploy-infra-caddy]
+description = "Deploy Caddy to production"
+depends = ["build-infra-caddy"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=caddy"
+
+[tasks.deploy-infra-backup]
+description = "Deploy backup service to production"
+depends = ["build-infra-backup"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=backup"
+
+# 应用部署
+[tasks.deploy-app-hono]
+description = "Deploy hono-demo to production"
+depends = ["build-app-hono"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=hono-demo"
+
+[tasks.deploy-app-proxy]
+description = "Deploy proxy to production"
+depends = ["build-app-proxy"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=proxy"
+
+# SSG 部署
+[tasks.deploy-ssg-blog]
+description = "Deploy blog to production"
+depends = ["build-ssg-blog"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=blog"
+
+[tasks.deploy-ssg-storefront]
+description = "Deploy storefront to production"
+depends = ["build-ssg-storefront"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=storefront"
+
+# 数据库迁移部署
+[tasks.deploy-db-admin]
+description = "Run database migrations in production"
+depends = ["build-db-admin"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-db-admin.yml"
+
+[tasks.deploy-migrate-hono]
+description = "Run hono-demo migrations in production"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.yml -e service_name=hono-demo"
+
+# ==================== 服务器管理 (server-) ====================
+
+# 服务器初始化
+[tasks.server-init]
+description = "Initialize server (security, docker, directories)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml"
+
+[tasks.server-init-user]
 description = "Create deploy user on server"
 usage = '''
 arg "<ip>"
@@ -102,126 +266,155 @@ rsync -chazP ./scripts/create-init-user.sh ${usage_user?}@${usage_ip?}:
 ssh ${usage_user?}@${usage_ip?} 'bash create-init-user.sh'
 '''
 
+[tasks.server-configure-aws]
+description = "Configure AWS credentials on server (for ECR access)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml"
 
-[tasks."server-init"]
-description = "Initialize server (security, docker, directories)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml"
+# 备份相关
+[tasks.server-backup]
+description = "Run backup on production server"
+run = 'docker compose run --rm backup /usr/local/bin/backup-all.sh'
+dir = "infra-apps/backup"
 
-# ==================== 基础设施构建 ====================
-[tasks."build-postgres"]
-run = "bash infra-apps/postgres/build.sh"
+[tasks.server-backup-list]
+description = "List local backups"
+run = 'docker compose run --rm backup /usr/local/bin/list-backups.sh'
+dir = "infra-apps/backup"
 
-[tasks."build-redis"]
-run = "bash infra-apps/redis/build.sh"
+[tasks.server-backup-list-prod]
+description = "List production S3 backups"
+run = 'docker compose run --rm -e ENVIRONMENT=prod backup /usr/local/bin/list-s3-postgres.sh'
+dir = "infra-apps/backup"
 
-[tasks."build-caddy"]
-run = "bash infra-apps/caddy/build.sh"
+# 恢复相关
+[tasks.server-restore-postgres-latest]
+description = "Restore from latest local backup"
+run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-local.sh latest'
+dir = "infra-apps/backup"
 
-# ==================== 基础设施部署 ====================
-[tasks."deploy-postgres"]
-depends = ["build-postgres"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=postgres"
+[tasks.server-restore-postgres-file]
+description = "Restore from specific local backup file"
+run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-local.sh'
+dir = "infra-apps/backup"
 
-[tasks."deploy-redis"]
-depends = ["build-redis"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=redis"
+[tasks.server-restore-s3-list]
+description = "List S3 backups (dev)"
+run = 'docker compose run --rm backup /usr/local/bin/list-s3-postgres.sh'
+dir = "infra-apps/backup"
 
-[tasks."deploy-caddy"]
-depends = ["build-caddy"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=caddy"
+[tasks.server-restore-s3-list-prod]
+description = "List S3 backups (production)"
+run = 'docker compose run --rm -e ENVIRONMENT=prod backup /usr/local/bin/list-s3-postgres.sh'
+dir = "infra-apps/backup"
 
-[tasks."deploy-backup"]
-depends = ["build-backup"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=backup"
+[tasks.server-restore-s3-latest]
+description = "Restore from latest S3 backup"
+run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh latest'
+dir = "infra-apps/backup"
 
-[tasks."deploy-infra"]
-depends = ["deploy-postgres", "deploy-redis", "deploy-caddy", "deploy-backup"]
+[tasks.server-restore-s3-file]
+description = "Restore from specific S3 backup"
+run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh'
+dir = "infra-apps/backup"
 
-# ==================== 后端应用构建 ====================
-[tasks."build-hono"]
-run = "bash js-apps/hono-demo/build.sh"
+# 清理相关
+[tasks.server-clean-postgres-soft]
+description = "Soft clean PostgreSQL (keep data)"
+run = 'docker compose run --rm backup /usr/local/bin/clean-postgres.sh'
+dir = "infra-apps/backup"
 
-[tasks."build-api"]
-run = "bash js-apps/api/build.sh"
+[tasks.server-clean-postgres-hard]
+description = "Hard clean PostgreSQL (remove all data)"
+run = 'docker compose down -v'
+dir = "infra-apps/postgres"
 
-[tasks."build-admin"]
-run = "bash js-apps/admin/build.sh"
+[tasks.server-clean-s3-smart]
+description = "Smart clean S3 backups (3-2-1 retention)"
+run = 'docker compose run --rm backup /usr/local/bin/cleanup-s3-smart.sh'
+dir = "infra-apps/backup"
 
-# ==================== 后端应用部署 ====================
-[tasks."deploy-hono"]
-depends = ["build-hono"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=hono-demo"
-
-[tasks."deploy-api"]
-depends = ["build-api"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=api"
-
-[tasks."deploy-admin"]
-depends = ["build-admin"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=admin"
-
-# ==================== SSG 应用构建 ====================
-[tasks."build-storefront"]
-run = "bash js-apps/storefront/build.sh"
-
-[tasks."build-blog"]
-run = "bash js-apps/blog/build.sh"
-
-[tasks."build-marketing"]
-run = "bash js-apps/marketing/build.sh"
-
-# ==================== SSG 应用部署 ====================
-[tasks."deploy-storefront"]
-depends = ["build-storefront"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=storefront"
-
-[tasks."deploy-blog"]
-depends = ["build-blog"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=blog"
-
-[tasks."deploy-marketing"]
-depends = ["build-marketing"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=marketing"
-
-# ==================== 回滚 ====================
-[tasks."rollback-hono"]
+# 回滚相关
+[tasks.server-rollback-app-hono]
+description = "Rollback hono-demo to previous version"
 run = '''
 ansible all -i ansible/inventory.yml --become --become-user=deploy -m shell -a "
   cd /srv/studio/js-apps/hono-demo && \
-  PREV=\$(ls -t | grep '^[0-9]\\{14\\}$' | sed -n 2p) && \
+  PREV=\$(ls -t | grep '^[0-9]\{14\}$' | sed -n 2p) && \
   ln -sfn \$PREV current && \
-  cd current && docker-rollout -f docker-compose.yml
+  cd current && docker compose up -d
 "
 '''
 
-[tasks."rollback-storefront"]
+[tasks.server-rollback-ssg-storefront]
+description = "Rollback storefront to previous version"
 run = '''
 ansible all -i ansible/inventory.yml --become --become-user=deploy -m shell -a "
   cd /srv/studio/ssg-apps/storefront && \
-  PREV=\$(ls -t | grep '^[0-9]\\{14\\}$' | sed -n 2p) && \
+  PREV=\$(ls -t | grep '^[0-9]\{14\}$' | sed -n 2p) && \
   ln -sfn \$PREV current
 "
 '''
 
-[tasks."server-configure-aws"]
-description = "Configure AWS credentials on server (for ECR access)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml"
+# ==================== 通用工具 (无前缀) ====================
 
-# ==================== 数据库管理 ====================
-[tasks."build-db-admin"]
+[tasks.lint]
+description = "Lint all projects"
+run = 'pnpm --filter "./js-apps/*" lint'
+
+[tasks.format]
+description = "Format code with Prettier"
+run = 'prettier --write "**/*.{ts,tsx,md}"'
+
+[tasks.test]
+description = "Run tests"
+run = 'pnpm --filter "./js-apps/*" test'
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = 'pnpm --filter "./js-apps/*" clean'
+
+[tasks.install]
+description = "Install dependencies"
+run = 'pnpm --filter "./js-apps/*" install'
+
+[tasks.build]
+description = "Build all projects"
+run = 'pnpm --filter "./js-apps/*" build'
+
+[tasks.serve]
+description = "Serve built applications"
+run = 'pnpm --filter "./js-apps/*" start'
+
+# ==================== 辅助工具 ====================
+
+[tasks.build-db-admin]
 description = "Build db-admin (prepare migrations)"
 run = "bash infra-apps/db-admin/build.sh"
 
-[tasks."deploy-db-admin"]
-description = "Run database migrations in production"
-depends = ["build-db-admin"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-db-admin.yml"
+[tasks.build-psenv]
+description = "Build psenv Rust tool"
+run = 'cargo build --release'
+dir = "rust-packages/psenv"
 
-# ==================== 应用级迁移 ====================
-[tasks."deploy-migrate-hono"]
-description = "Run hono-demo database migrations only"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.yml -e service_name=hono-demo"
+[tasks.release-psenv]
+description = "Publish psenv to crates.io"
+run = 'cargo publish'
+dir = "rust-packages/psenv"
 
-[tasks."migrate-api"]
-description = "Run API database migrations only"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.yml -e service_name=api"
+# ==================== 动态任务 ====================
+
+[tasks.addjs]
+description = "Add package to a specific JS project"
+usage = '''
+arg "<project>"
+arg "[packages]" var=#true
+'''
+run = 'pnpm --filter "./js-apps/${usage_project?}" add ${usage_packages?}'
+
+[tasks.buildjs]
+description = "Run custom build command for a JS project"
+usage = '''
+arg "<project>"
+arg "[args]" var=#true
+'''
+run = 'pnpm --filter "./js-apps/${usage_project?}" ${usage_args?}'

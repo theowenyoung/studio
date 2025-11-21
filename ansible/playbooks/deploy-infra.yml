@@ -54,6 +54,20 @@
         rsync_opts:
           - "--exclude=.git"
 
+    - name: Get previous version (for rollback)
+      shell: |
+        cd {{ remote_base }}
+        if [ -L current ]; then
+          readlink current | xargs basename
+        fi
+      register: previous_version_result
+      failed_when: false
+      changed_when: false
+
+    - name: Set previous version fact
+      set_fact:
+        previous_version: "{{ previous_version_result.stdout | default('') }}"
+
     - name: Update current symlink
       file:
         src: "{{ remote_base }}/{{ version }}"
@@ -78,53 +92,120 @@
           docker login --username AWS --password-stdin {{ ecr_registry }}
       environment:
         AWS_DEFAULT_REGION: "{{ ecr_region }}"
+      changed_when: false
+
+    - name: Pull new images (before stopping services)
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose pull --quiet
+      register: pull_result
+      changed_when: false
 
     - name: Docker compose up
       shell: |
         cd {{ remote_base }}/current
         docker compose up -d
-      register: result
+      register: deploy_result
 
-    - debug: var=result.stdout_lines
+    - debug: var=deploy_result.stdout_lines
 
-    - name: Wait for container to be running
+    - name: Wait for container to be healthy
       shell: |
         cd {{ remote_base }}/current
         docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
       register: container_state
-      until: container_state.stdout == "running"
-      retries: 6
+      until: container_state.stdout == "running" or container_state.stdout == "running (healthy)"
+      retries: 12
       delay: 5
       failed_when: false
 
-    - name: Check container health status
-      shell: |
-        cd {{ remote_base }}/current
-        docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.Health // empty' | head -1
-      register: health_status
-      failed_when: false
-
-    - name: Get container logs if not healthy
+    - name: Get container logs if deployment failed
       shell: |
         cd {{ remote_base }}/current
         docker compose logs --tail=50 {{ service_name }}
       register: container_logs
-      when: container_state.stdout != "running" or (health_status.stdout != "" and health_status.stdout != "healthy")
+      when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
 
-    - name: Display container logs if there are issues
+    - name: Display container logs
       debug:
         msg: "{{ container_logs.stdout_lines }}"
       when: container_logs is defined and container_logs.stdout_lines is defined
 
-    - name: Fail if container is not running
-      fail:
-        msg: "❌ Container {{ service_name }} failed to start! Check logs above."
-      when: container_state.stdout != "running"
+    # ===== 自动回滚逻辑 =====
+    - name: Rollback to previous version on failure
+      block:
+        - name: Check if previous version directory exists
+          stat:
+            path: "{{ remote_base }}/{{ previous_version }}"
+          register: previous_version_dir
+          when: previous_version != ''
 
-    - name: Warn if container is unhealthy
+        - name: Check if rollback is possible
+          set_fact:
+            needs_rollback: "{{ (container_state.stdout != 'running' and container_state.stdout != 'running (healthy)') and previous_version != '' and previous_version_dir.stat.exists | default(false) }}"
+
+        - name: Display rollback message
+          debug:
+            msg: "⚠️ Deployment failed! Rolling back to previous version: {{ previous_version }}"
+          when: needs_rollback
+
+        - name: Display no rollback available message
+          debug:
+            msg: "❌ Deployment failed and no previous version available to rollback to!"
+          when: (container_state.stdout != 'running' and container_state.stdout != 'running (healthy)') and (previous_version == '' or not (previous_version_dir.stat.exists | default(false)))
+
+        - name: Stop failed deployment
+          shell: |
+            cd {{ remote_base }}/current
+            docker compose down
+          when: needs_rollback
+          failed_when: false
+
+        - name: Restore previous version symlink
+          file:
+            src: "{{ remote_base }}/{{ previous_version }}"
+            dest: "{{ remote_base }}/current"
+            state: link
+            force: yes
+          when: needs_rollback
+
+        - name: Start previous version
+          shell: |
+            cd {{ remote_base }}/current
+            docker compose up -d
+          when: needs_rollback
+          register: rollback_result
+
+        - name: Verify rollback succeeded
+          shell: |
+            cd {{ remote_base }}/current
+            docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
+          register: rollback_state
+          until: rollback_state.stdout == "running"
+          retries: 3
+          delay: 5
+          when: needs_rollback
+          failed_when: false
+
+        - name: Display rollback result
+          debug:
+            msg: "✅ Rollback completed. Service {{ service_name }} is running on version {{ previous_version }}"
+          when: needs_rollback and rollback_state.stdout == "running"
+
+        - name: Fail deployment after rollback
+          fail:
+            msg: "❌ Deployment of version {{ version }} failed! Rolled back to {{ previous_version }}. Check logs above."
+          when: needs_rollback
+
+        - name: Fail deployment without rollback (first deployment or no previous version)
+          fail:
+            msg: "❌ Deployment of version {{ version }} failed! No previous version to rollback to. Check logs above."
+          when: (container_state.stdout != 'running' and container_state.stdout != 'running (healthy)') and not needs_rollback
+
+    - name: Display success message
       debug:
-        msg: "⚠️ Warning: Container {{ service_name }} is running but unhealthy. Check logs above."
-      when: health_status.stdout != "" and health_status.stdout != "healthy" and container_state.stdout == "running"
+        msg: "✅ Successfully deployed {{ service_name }} version {{ version }}"
+      when: container_state.stdout == "running" or container_state.stdout == "running (healthy)"
 
     - name: Keep only latest 3 versions
       shell: |

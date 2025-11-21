@@ -15,8 +15,9 @@ services:
     image: ${IMAGE_TAG}
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "${SERVICE_PORT}:${SERVICE_PORT}"
+    # 生产环境不需要端口映射，通过 Docker 内部网络 (shared) 访问
+    # ports:
+    #   - "${SERVICE_PORT}:${SERVICE_PORT}"
     networks:
       - shared
     # 注意：postgres 和 redis 是独立部署的基础设施服务，通过共享网络连接

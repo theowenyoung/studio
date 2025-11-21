@@ -50,12 +50,12 @@ echo ""
 
 # 显示最近10天的备份详情
 echo "$DATES" | head -10 | while read date; do
-    # 计算距今天数
-    TODAY=$(date +%Y%m%d)
+    # 计算距今天数（使用 UTC 时区）
+    TODAY=$(date -u +%Y%m%d)
     if [ "$date" = "$TODAY" ]; then
         AGE_STR="(today)"
     else
-        DAYS_AGO=$(( ($(date +%s) - $(date -d "$date" +%s 2>/dev/null || date -j -f "%Y%m%d" "$date" +%s)) / 86400 ))
+        DAYS_AGO=$(( ($(date -u +%s) - $(date -u -d "$date" +%s 2>/dev/null || date -u -j -f "%Y%m%d" "$date" +%s)) / 86400 ))
         if [ "$DAYS_AGO" -eq 1 ]; then
             AGE_STR="(yesterday)"
         else

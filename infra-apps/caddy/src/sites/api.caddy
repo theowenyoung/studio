@@ -1,4 +1,4 @@
 # API 后端服务配置
 api-demo.owenyoung.com {
-    import ../snippets/proxy-common.caddy hono-demo:8001
+    import ../snippets/proxy-common.caddy hono-demo:80
 }

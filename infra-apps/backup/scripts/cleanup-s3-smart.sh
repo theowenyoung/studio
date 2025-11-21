@@ -14,11 +14,11 @@ AWS_ARGS=""
 [ -n "$S3_ENDPOINT" ] && AWS_ARGS="$AWS_ARGS --endpoint-url $S3_ENDPOINT"
 [ -n "$S3_REGION" ] && AWS_ARGS="$AWS_ARGS --region $S3_REGION"
 
-# 计算关键日期
-TODAY=$(date +%Y%m%d)
-SEVEN_DAYS_AGO=$(date -d "7 days ago" +%Y%m%d 2>/dev/null || date -v-7d +%Y%m%d)
-THIRTY_DAYS_AGO=$(date -d "30 days ago" +%Y%m%d 2>/dev/null || date -v-30d +%Y%m%d)
-NINETY_DAYS_AGO=$(date -d "90 days ago" +%Y%m%d 2>/dev/null || date -v-90d +%Y%m%d)
+# 计算关键日期（使用 UTC 时区）
+TODAY=$(date -u +%Y%m%d)
+SEVEN_DAYS_AGO=$(date -u -d "7 days ago" +%Y%m%d 2>/dev/null || date -u -v-7d +%Y%m%d)
+THIRTY_DAYS_AGO=$(date -u -d "30 days ago" +%Y%m%d 2>/dev/null || date -u -v-30d +%Y%m%d)
+NINETY_DAYS_AGO=$(date -u -d "90 days ago" +%Y%m%d 2>/dev/null || date -u -v-90d +%Y%m%d)
 
 echo "Retention Strategy:"
 echo "  📅 Last 7 days ($SEVEN_DAYS_AGO - $TODAY): Keep ALL"
@@ -55,9 +55,9 @@ cleanup_database() {
 
         # 7-30天：只保留周日
         elif [ "$folder_date" -ge "$THIRTY_DAYS_AGO" ]; then
-            # 计算是星期几 (0=Sunday)
-            DAY_OF_WEEK=$(date -d "$folder_date" +%w 2>/dev/null || \
-                          date -j -f "%Y%m%d" "$folder_date" +%w 2>/dev/null || echo "")
+            # 计算是星期几 (0=Sunday)，使用 UTC 时区
+            DAY_OF_WEEK=$(date -u -d "$folder_date" +%w 2>/dev/null || \
+                          date -u -j -f "%Y%m%d" "$folder_date" +%w 2>/dev/null || echo "")
 
             if [ "$DAY_OF_WEEK" = "0" ]; then
                 echo "✅ KEEP: $folder_date (Sunday backup, 7-30 days)"

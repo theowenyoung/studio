@@ -57,7 +57,8 @@ else
 fi
 
 # 下载到临时目录
-TEMP_FILE="/tmp/restore-$(date +%s).sql.gz"
+# 使用 UTC 时间戳避免时区差异
+TEMP_FILE="/tmp/restore-$(date -u +%s).sql.gz"
 echo "[$(date)] Downloading from S3: $S3_PATH"
 echo "[$(date)] Temporary file: $TEMP_FILE"
 

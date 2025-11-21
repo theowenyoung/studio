@@ -1,6 +1,7 @@
 {
   "name": "hono-demo",
   "type": "module",
+  "private": true,
   "scripts": {
     "dev": "vite --host --port 8001",
     "build:client": "vite build --mode client",

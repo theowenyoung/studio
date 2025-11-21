@@ -6,8 +6,9 @@ export ECR_REGION="us-west-2"
 export DEPLOY_DIST="deploy-dist"
 
 # ===== 生成统一版本号（YYYYMMDDHHmmss）=====
+# 使用 UTC 时区避免不同机器时区差异
 get_version() {
-  date +%Y%m%d%H%M%S
+  date -u +%Y%m%d%H%M%S
 }
 
 # ===== ECR 登录 =====

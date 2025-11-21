@@ -1,13 +1,24 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 const app = new Hono();
-export const PORT = process.env.NODE_ENV === "production" ? 8001 : 8001;
+// 生产环境从环境变量读取（build.sh 设置为 80），开发环境默认 8002
+export const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8002;
+
+// 全局错误处理中间件
+app.onError((err, c) => {
+  console.error('Proxy error:', err);
+  return c.json({
+    error: err.message || 'Internal Server Error',
+    timestamp: new Date().toISOString()
+  }, 500);
+});
+
 app.all("*", proxy);
 export async function proxy(c) {
-
-  const originalRequest = c.req.raw;
-  const newUrl = getNewUrlWithNewOrigin(c.req.url);
-  console.log('newUrl',newUrl)
+  try {
+    const originalRequest = c.req.raw;
+    const newUrl = getNewUrlWithNewOrigin(c.req.url);
+    console.log('newUrl', newUrl)
 
   const clonedRequest = originalRequest.clone();
   clonedRequest.headers.delete("keep-alive");
@@ -24,20 +35,45 @@ export async function proxy(c) {
   newRequest.headers.delete("keep-alive");
   console.log(newRequest.headers)
 
-  const response = await fetch(newRequest);
-  // console.log("response", response);
+    const response = await fetch(newRequest);
+    // console.log("response", response);
 
-  // return fetch(newRequest);
-  // return new Response("hello");
-  let body = "";
-  if (response.body) {
-    body = await response.text();
+    // return fetch(newRequest);
+    // return new Response("hello");
+    let body = "";
+    if (response.body) {
+      body = await response.text();
+    }
+    // remove connection
+    return c.text(body, response.status, {
+      "content-type":
+        (response.headers.get("content-type") ) || "text/html",
+    });
+  } catch (error) {
+    console.error('Request failed:', error);
+
+    // 特定错误处理
+    if (error.message === 'Missing _host parameter') {
+      return c.json({
+        error: 'Missing required parameter: _host',
+        usage: 'Add ?_host=example.com to your request',
+        example: `${c.req.url.split('?')[0]}?_host=example.com`,
+        timestamp: new Date().toISOString()
+      }, 400);
+    }
+
+    // 网络错误
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      return c.json({
+        error: 'Failed to fetch upstream server',
+        details: error.message,
+        timestamp: new Date().toISOString()
+      }, 502);
+    }
+
+    // 其他错误
+    throw error; // 交给全局错误处理器
   }
-  // remove connection
-  return c.text(body, response.status, {
-    "content-type":
-      (response.headers.get("content-type") ) || "text/html",
-  });
 }
 
 function getNewUrlWithNewOrigin(oldUrl) {

@@ -16,27 +16,31 @@
 # Admin - Vite 开发服务器
 admin.studio.localhost {
     import local_tls
-    reverse_proxy host.docker.internal:3001  # Vite 默认端口
+    reverse_proxy host.docker.internal:9001
 }
 
 # API - Node.js 服务
 api.studio.localhost {
     import local_tls
-    reverse_proxy host.docker.internal:5001
+    reverse_proxy host.docker.internal:8003
 }
 
 # Blog - Remix 开发服务器
 blog.studio.localhost {
     import local_tls
-    reverse_proxy host.docker.internal:5173  # 另一个端口
+    reverse_proxy host.docker.internal:9002  # 另一个端口
 }
 
 # Storefront - Next.js 开发服务器
 storefront.studio.localhost {
     import local_tls
-    reverse_proxy host.docker.internal:3002
+    reverse_proxy host.docker.internal:9003
 }
 hono.studio.localhost {
     import local_tls
     reverse_proxy host.docker.internal:8001
+}
+proxy.studio.localhost {
+    import local_tls
+    reverse_proxy host.docker.internal:8002
 }

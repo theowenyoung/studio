@@ -4,8 +4,9 @@ set -e
 # 加载 URL 解析工具
 source /usr/local/bin/parse-url.sh
 
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-DATE=$(date +%Y%m%d)
+# 使用 UTC 时区避免不同机器时区差异
+TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+DATE=$(date -u +%Y%m%d)
 FILE="redis-${TIMESTAMP}.rdb"
 LOCAL_PATH="/backups/redis/${FILE}"
 

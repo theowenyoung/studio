@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-DATE=$(date +%Y%m%d)
+# 使用 UTC 时区避免不同机器时区差异
+TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
+DATE=$(date -u +%Y%m%d)
 FILE="postgres-all-${TIMESTAMP}.sql.gz"
 LOCAL_PATH="/backups/postgres/${FILE}"
 
