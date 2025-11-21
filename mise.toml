@@ -217,10 +217,11 @@ depends = ["build-infra-backup"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=backup"
 
 # 应用部署
-[tasks.deploy-app-hono]
+[tasks.deploy-app-hono-demo]
 description = "Deploy hono-demo to production"
 depends = ["build-app-hono"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=hono-demo"
+alias = "deploy-hono"
 
 [tasks.deploy-app-proxy]
 description = "Deploy proxy to production"
