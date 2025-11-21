@@ -109,6 +109,18 @@
 
     - debug: var=deploy_result.stdout_lines
 
+    - name: Restart Caddy to apply configuration changes (required for volume mounts)
+      shell: |
+        cd {{ remote_base }}/current
+        docker compose restart caddy
+      when: service_name == 'caddy'
+      register: caddy_restart_result
+
+    - name: Display Caddy restart result
+      debug:
+        msg: "Caddy restarted to apply new configuration"
+      when: service_name == 'caddy'
+
     - name: Wait for container to be healthy
       shell: |
         cd {{ remote_base }}/current

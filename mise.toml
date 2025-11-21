@@ -210,6 +210,7 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.
 description = "Deploy Caddy to production"
 depends = ["build-infra-caddy"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=caddy"
+alias = "deploy-caddy"
 
 [tasks.deploy-infra-backup]
 description = "Deploy backup service to production"

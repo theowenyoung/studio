@@ -19,6 +19,12 @@ cp "$SCRIPT_DIR/src/Caddyfile.prod" "$SCRIPT_DIR/$DEPLOY_DIST/Caddyfile"
 cp -r "$SCRIPT_DIR/src/snippets" "$SCRIPT_DIR/$DEPLOY_DIST/"
 cp -r "$SCRIPT_DIR/src/sites" "$SCRIPT_DIR/$DEPLOY_DIST/"
 
+# 2.5. 复制管理脚本到服务器
+cp "$SCRIPT_DIR/src/reload.sh" "$SCRIPT_DIR/$DEPLOY_DIST/reload.sh"
+cp "$SCRIPT_DIR/src/restart.sh" "$SCRIPT_DIR/$DEPLOY_DIST/restart.sh"
+chmod +x "$SCRIPT_DIR/$DEPLOY_DIST/reload.sh"
+chmod +x "$SCRIPT_DIR/$DEPLOY_DIST/restart.sh"
+
 # 3. 复制 docker-compose 配置
 if [ -f "$SCRIPT_DIR/docker-compose.prod.yml" ]; then
   cp "$SCRIPT_DIR/docker-compose.prod.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
