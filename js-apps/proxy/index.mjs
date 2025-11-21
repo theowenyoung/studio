@@ -1,8 +1,9 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 const app = new Hono();
-// 生产环境从环境变量读取（build.sh 设置为 80），开发环境默认 8002
-export const PORT = process.env.PORT ? parseInt(process.env.PORT) : 8002;
+// 生产环境默认使用 8000，开发环境默认 8002，可通过 PORT 环境变量覆盖
+const isDev = process.env.NODE_ENV !== 'production';
+export const PORT = process.env.PORT ? parseInt(process.env.PORT) : (isDev ? 8002 : 8000);
 
 // 全局错误处理中间件
 app.onError((err, c) => {

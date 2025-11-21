@@ -57,8 +57,8 @@ RUN addgroup --system --gid 1001 nodejs \
 # 从 deps 导入"已裁剪的"产物
 COPY --from=deps --chown=appuser:nodejs /out/ /app/
 
-# 暴露端口
-ARG EXPOSE_PORT=3000
+# 暴露端口（生产环境统一使用 8000）
+ARG EXPOSE_PORT=8000
 EXPOSE ${EXPOSE_PORT}
 
 USER appuser
