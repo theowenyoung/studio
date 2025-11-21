@@ -35,32 +35,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 使用 paths-filter 检测变更
-      - uses: dorny/paths-filter@v3
-        id: filter
-        if: github.event_name == 'push' || inputs.target == 'auto'
-        with:
-          filters: |
-            hono-demo:
-              - 'js-apps/hono-demo/**'
-            proxy:
-              - 'js-apps/proxy/**'
-            blog:
-              - 'js-apps/blog/**'
-            storefront:
-              - 'js-apps/storefront/**'
-            admin:
-              - 'js-apps/admin/**'
-            api:
-              - 'js-apps/api/**'
-            shared:
-              - 'js-packages/**'
+      # 检测变更的服务（使用 git diff）
+      - name: Detect changed services
+        id: detect-changes
+        run: |
+          # 自动发现 js-apps 下的所有服务
+          ALL_SERVICES=$(ls -1 js-apps | tr '\n' ' ')
+          echo "All services: $ALL_SERVICES"
+
+          # 获取变更的文件
+          if [ "${{ github.event_name }}" = "push" ]; then
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} || echo "")
+          else
+            # workflow_dispatch: 比较最近两次 commit
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD || echo "")
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # 检查是否有共享包变更
+          SHARED_CHANGED="false"
+          if echo "$CHANGED_FILES" | grep -q "^js-packages/"; then
+            SHARED_CHANGED="true"
+            echo "Shared packages changed: true"
+          fi
+
+          # 检测哪些服务变更了
+          CHANGED_SERVICES=""
+          for svc in $ALL_SERVICES; do
+            if echo "$CHANGED_FILES" | grep -q "^js-apps/$svc/"; then
+              CHANGED_SERVICES="$CHANGED_SERVICES $svc"
+              echo "Service changed: $svc"
+            fi
+          done
+
+          echo "all_services=$ALL_SERVICES" >> $GITHUB_OUTPUT
+          echo "changed_services=$CHANGED_SERVICES" >> $GITHUB_OUTPUT
+          echo "shared_changed=$SHARED_CHANGED" >> $GITHUB_OUTPUT
 
       # 构建部署矩阵
       - name: Set deployment matrix
         id: set-matrix
         run: |
-          ALL_SERVICES="hono-demo proxy blog storefront admin api"
+          ALL_SERVICES="${{ steps.detect-changes.outputs.all_services }}"
+          CHANGED_SERVICES="${{ steps.detect-changes.outputs.changed_services }}"
+          SHARED_CHANGED="${{ steps.detect-changes.outputs.shared_changed }}"
 
           # 手动触发
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -69,38 +89,37 @@ jobs:
             if [ "$TARGET" = "all" ]; then
               DEPLOY_SERVICES="$ALL_SERVICES"
             elif [ "$TARGET" = "auto" ]; then
-              # 基于 paths-filter 自动检测
-              DEPLOY_SERVICES=""
-              SHARED_CHANGED="${{ steps.filter.outputs.shared }}"
-
-              for svc in $ALL_SERVICES; do
-                SVC_CHANGED=$(echo "${{ toJson(steps.filter.outputs) }}" | jq -r ".\"$svc\"")
-                if [ "$SVC_CHANGED" = "true" ] || [ "$SHARED_CHANGED" = "true" ]; then
-                  DEPLOY_SERVICES="$DEPLOY_SERVICES $svc"
-                fi
-              done
+              # 基于文件变更自动检测
+              if [ "$SHARED_CHANGED" = "true" ]; then
+                DEPLOY_SERVICES="$ALL_SERVICES"
+              else
+                DEPLOY_SERVICES="$CHANGED_SERVICES"
+              fi
             else
               DEPLOY_SERVICES="$TARGET"
             fi
           else
-            # Push 事件：基于 paths-filter
-            DEPLOY_SERVICES=""
-            SHARED_CHANGED="${{ steps.filter.outputs.shared }}"
-
-            for svc in $ALL_SERVICES; do
-              SVC_CHANGED=$(echo "${{ toJson(steps.filter.outputs) }}" | jq -r ".\"$svc\"")
-              if [ "$SVC_CHANGED" = "true" ] || [ "$SHARED_CHANGED" = "true" ]; then
-                DEPLOY_SERVICES="$DEPLOY_SERVICES $svc"
-              fi
-            done
+            # Push 事件：自动检测
+            if [ "$SHARED_CHANGED" = "true" ]; then
+              DEPLOY_SERVICES="$ALL_SERVICES"
+              echo "Shared packages changed, deploying all services"
+            else
+              DEPLOY_SERVICES="$CHANGED_SERVICES"
+              echo "Deploying only changed services"
+            fi
           fi
+
+          # 去除多余空格
+          DEPLOY_SERVICES=$(echo "$DEPLOY_SERVICES" | xargs)
 
           # 构建 JSON matrix
           if [ -z "$DEPLOY_SERVICES" ]; then
             MATRIX='{"include":[]}'
+            echo "No services to deploy"
           else
             MATRIX_ITEMS=$(echo $DEPLOY_SERVICES | tr ' ' '\n' | sed 's/.*/{\"service\":\"&\"}/' | paste -sd ',' -)
             MATRIX="{\"include\":[${MATRIX_ITEMS}]}"
+            echo "Services to deploy: $DEPLOY_SERVICES"
           fi
 
           echo "matrix=${MATRIX}" >> $GITHUB_OUTPUT
