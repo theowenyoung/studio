@@ -34,6 +34,8 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 获取完整历史，以便 git diff 能找到 before commit
 
       # 检测变更的服务（使用 git diff）
       - name: Detect changed services
@@ -45,10 +47,10 @@ jobs:
 
           # 获取变更的文件
           if [ "${{ github.event_name }}" = "push" ]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} || echo "")
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
           else
             # workflow_dispatch: 比较最近两次 commit
-            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD || echo "")
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
           fi
 
           echo "Changed files:"
