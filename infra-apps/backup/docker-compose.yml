@@ -7,6 +7,7 @@ services:
     environment:
       # 非敏感配置，直接在这里设置
       S3_REGION: us-east-005
+      ENVIRONMENT: dev
       BACKUP_RETENTION_LOCAL: 3
       BACKUP_RETENTION_S3: 30
 

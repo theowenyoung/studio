@@ -28,6 +28,13 @@
 }
 
 # ==================== SSG Sites (nginx containers) ====================
+
+remove-cf-for-aigateway.owenyoung.com {
+  reverse_proxy https://gateway.ai.cloudflare.com  {
+    header_up -cf-*
+    header_up Host gateway.ai.cloudflare.com
+  }
+}
 # Blog
 blog-demo.owenyoung.com {
     reverse_proxy blog:3000

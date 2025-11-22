@@ -25,6 +25,11 @@ run = 'pnpm --filter "proxy" dev'
 description = "Start api development server"
 run = 'pnpm --filter "api" dev'
 
+[tasks.dev-meilisearch]
+description = "Start meilisearch service"
+run = 'docker compose up'
+dir = "external-apps/meilisearch"
+
 [tasks.dev-all]
 description = "Start all development servers"
 alias = "dev"
@@ -53,12 +58,12 @@ run = 'docker network create shared'
 [tasks.dev-up]
 description = "Start all local infrastructure"
 alias = "up"
-depends = ["dev-up-postgres", "dev-up-redis", "dev-up-caddy"]
+depends = ["dev-up-postgres", "dev-up-redis", "dev-up-caddy", "dev-up-meilisearch"]
 
 [tasks.dev-down]
 description = "Stop all local infrastructure"
 alias = "down"
-depends = ["dev-down-postgres", "dev-down-redis", "dev-down-caddy"]
+depends = ["dev-down-postgres", "dev-down-redis", "dev-down-caddy", "dev-down-meilisearch"]
 
 [tasks.dev-logs]
 description = "View logs from all local infrastructure services"
@@ -115,10 +120,25 @@ description = "Stop local Caddy"
 run = 'docker compose down'
 dir = "infra-apps/caddy"
 
+[tasks.dev-up-meilisearch]
+description = "Start local Meilisearch"
+run = 'docker compose up -d'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-down-meilisearch]
+description = "Stop local Meilisearch"
+run = 'docker compose down'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-logs-meilisearch]
+description = "View Meilisearch logs"
+run = 'docker compose logs -f --tail=100'
+dir = "external-apps/meilisearch"
+
 [tasks.dev-env]
 description = "Fetch all development environment variables"
 alias = "env"
-depends = ["dev-env-postgres", "dev-env-redis", "dev-env-hono", "dev-env-backup", "dev-env-admin"]
+depends = ["dev-env-postgres", "dev-env-redis", "dev-env-hono", "dev-env-backup", "dev-env-admin", "dev-env-meilisearch"]
 
 [tasks.dev-env-postgres]
 description = "Fetch PostgreSQL dev environment variables"
@@ -144,6 +164,11 @@ dir = "infra-apps/backup"
 description = "Fetch db-admin dev environment variables"
 run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
 dir = "infra-apps/db-admin"
+
+[tasks.dev-env-meilisearch]
+description = "Fetch meilisearch dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "external-apps/meilisearch"
 
 [tasks.dev-backup]
 description = "Run backup in dev environment"
@@ -207,6 +232,11 @@ run = "bash js-apps/blog/build.sh"
 description = "Build storefront application"
 run = "bash js-apps/storefront/build.sh"
 
+# External 应用构建
+[tasks.build-meilisearch]
+description = "Build meilisearch"
+run = "bash external-apps/meilisearch/build.sh"
+
 # ==================== 部署 (deploy-) ====================
 
 # 基础设施部署
@@ -258,6 +288,12 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.ym
 description = "Deploy storefront to production"
 depends = ["build-storefront"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=storefront"
+
+# External 应用部署
+[tasks.deploy-meilisearch]
+description = "Deploy meilisearch to production"
+depends = ["build-meilisearch"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-external-app.yml -e service_name=meilisearch"
 
 # 数据库迁移部署
 [tasks.deploy-infra-db-admin]

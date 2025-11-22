@@ -1,0 +1,79 @@
+---
+- name: Deploy External Application
+  hosts: all
+  become: yes
+  become_user: deploy
+  gather_facts: no
+
+  vars:
+    service_name: "{{ service_name }}"
+    local_dist: "{{ playbook_dir }}/../../external-apps/{{ service_name }}/deploy-dist"
+    remote_dir: "/srv/studio/external-apps/{{ service_name }}"
+
+  tasks:
+    - debug:
+        msg: "🚀 Deploying {{ service_name }}"
+
+    - name: Ensure service directory exists
+      file:
+        path: "{{ remote_dir }}"
+        state: directory
+        mode: '0755'
+
+    # ===== Sync files =====
+    - name: Sync deploy-dist to server
+      synchronize:
+        src: "{{ local_dist }}/"
+        dest: "{{ remote_dir }}/"
+        delete: yes
+
+    # ===== Docker operations =====
+    - name: Pull new images
+      shell: |
+        cd {{ remote_dir }}
+        docker compose pull --quiet
+      register: pull_result
+      changed_when: false
+
+    # ===== Deploy service =====
+    - name: Docker compose up with remove-orphans
+      shell: |
+        cd {{ remote_dir }}
+        docker compose up -d --remove-orphans
+      register: deploy_result
+
+    - debug:
+        msg: "{{ deploy_result.stdout_lines }}"
+
+    # ===== Health check =====
+    - name: Wait for container to be healthy
+      shell: |
+        cd {{ remote_dir }}
+        docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
+      register: container_state
+      until: container_state.stdout == "running" or container_state.stdout == "running (healthy)"
+      retries: 12
+      delay: 5
+      failed_when: false
+
+    - name: Get container logs if deployment failed
+      shell: |
+        cd {{ remote_dir }}
+        docker compose logs --tail=50 {{ service_name }}
+      register: container_logs
+      when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
+
+    - name: Display container logs
+      debug:
+        msg: "{{ container_logs.stdout_lines }}"
+      when: container_logs is defined and container_logs.stdout_lines is defined
+
+    - name: Fail if deployment unsuccessful
+      fail:
+        msg: "❌ Deployment of {{ service_name }} failed! Check logs above."
+      when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
+
+    - name: Display success message
+      debug:
+        msg: "✅ Successfully deployed {{ service_name }}"
+      when: container_state.stdout == "running" or container_state.stdout == "running (healthy)"

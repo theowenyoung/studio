@@ -5,6 +5,7 @@ services:
     env_file:
       - .env  # 从 .env 加载敏感信息：POSTGRES_ADMIN_URL, REDIS_DOCKER_URL, S3 凭证等
     environment:
+      ENVIRONMENT: prod
       # 非敏感配置，直接在这里设置
       S3_REGION: us-east-005
       BACKUP_RETENTION_LOCAL: 7     # 生产环境保留更久
