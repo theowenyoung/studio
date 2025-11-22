@@ -1,427 +1,296 @@
-# 部署指南
+# Deployment Guide
 
-## 📁 目录结构
+快速参考指南，用于部署各类服务到生产环境。
+
+## 目录结构
 
 ```
-project/
-├── scripts/
-│   ├── build-lib.sh                    # 公共构建函数库
-│   └── create-init-user.sh            # 创建部署用户
-│
-├── infra-apps/                         # 基础设施服务
-│   ├── caddy/
-│   │   ├── src/
-│   │   │   ├── Caddyfile.prod         # 生产环境主配置
-│   │   │   ├── snippets/
-│   │   │   │   └── ssg-common.caddy   # SSG 通用配置
-│   │   │   └── sites/
-│   │   │       ├── storefront.caddy   # 各站点配置
-│   │   │       ├── blog.caddy
-│   │   │       └── api.caddy
-│   │   ├── docker-compose.prod.yml
-│   │   └── build.sh
-│   ├── postgres/
-│   │   ├── docker-compose.prod.yml
-│   │   └── build.sh
-│   └── redis/
-│       ├── docker-compose.prod.yml
-│       └── build.sh
-│
-├── js-apps/                            # 应用服务
-│   ├── hono-demo/                     # 后端应用
-│   │   ├── templates/
-│   │   │   └── docker-compose.prod.yml
-│   │   └── build.sh
-│   └── storefront/                    # SSG 应用
-│       └── build.sh
-│
+studio-new/
+├── docker/
+│   └── nodejs-ssg/          # 共享的 SSG Dockerfile
+│       ├── Dockerfile       # 通用 SSG 构建文件
+│       ├── nginx.conf       # 优化的 nginx 配置
+│       └── README.md        # 详细使用说明
 ├── ansible/
-│   ├── inventory.yml                  # 服务器清单
-│   ├── requirements.yml               # Ansible Galaxy 依赖
-│   ├── playbooks/
-│   │   ├── init-server.yml           # 服务器初始化（主流程）
-│   │   ├── security.yml              # 安全加固
-│   │   ├── mount.yml                 # 数据盘挂载
-│   │   ├── setup-docker.yml          # Docker 配置
-│   │   ├── deploy-infra.yml          # 部署基础设施
-│   │   ├── deploy-app.yml            # 部署后端应用
-│   │   └── deploy-ssg.yml            # 部署 SSG 应用
-│   └── tasks/                         # 可复用任务
-│
-└── mise.toml                          # 任务管理配置
+│   └── playbooks/
+│       ├── deploy-ssg.yml              # SSG 项目部署
+│       ├── deploy-app.yml              # App 项目部署（已简化）
+│       ├── deploy-infra-caddy.yml      # Caddy 部署（智能 reload）
+│       ├── deploy-infra-postgres.yml   # PostgreSQL 部署
+│       ├── deploy-infra-redis.yml      # Redis 部署
+│       └── deploy-infra-backup.yml     # Backup 服务部署
+└── mise.toml                # 任务配置
 ```
 
-## 🚀 快速开始
+## 快速开始
 
-### 0. 准备工作
+### SSG 项目部署
 
 ```bash
-# 安装 Ansible Galaxy 依赖（首次运行）
-ansible-galaxy install -r ansible/requirements.yml
+# 1. 构建并推送到 ECR
+mise run build-ssg-blog        # 或 build-ssg-storefront
 
-# 安装 Python 依赖（用于 AWS Parameter Store 访问）
-pip install boto3
+# 2. 部署到生产
+mise run deploy-ssg-blog       # 或 deploy-ssg-storefront
 ```
 
-这将安装以下社区角色：
-- `robertdebock.bootstrap` - 系统基础配置
-- `robertdebock.update` - 系统更新
-- `geerlingguy.docker` - Docker 安装
-- `geerlingguy.security` - 安全加固
-- `geerlingguy.firewall` - 防火墙配置
-- `willshersystems.sshd` - SSH 配置
-
-### 1. 初始化服务器
+### App 项目部署
 
 ```bash
-# 第一步：创建 deploy 用户（在本地执行）
-mise run server-init-user <server-ip>
+# 1. 构建并推送到 ECR
+mise run build-app-hono        # 或 build-app-proxy
 
-# 第二步：配置服务器环境
-mise run server-init
+# 2. 部署到生产（自动运行迁移）
+mise run deploy-app-hono-demo  # 或 deploy-app-proxy
 ```
 
-这将自动完成：
-- ✅ 系统更新和基础配置（bootstrap, update）
-- ✅ 安全加固（SSH 强化、防火墙、Fail2ban）
-- ✅ 数据盘挂载（自动检测并挂载到 /data）
-- ✅ Docker 安装和配置（使用社区角色）
-- ✅ 共享网络创建
-- ✅ 应用目录结构
-- ✅ docker-rollout 工具安装
-
-### 2. 部署基础设施
+### Infra 服务部署
 
 ```bash
-# 一次性部署所有基础设施
+# 部署单个服务
+mise run deploy-infra-caddy    # Caddy (智能 reload)
+mise run deploy-infra-postgres # PostgreSQL
+mise run deploy-infra-redis    # Redis
+mise run deploy-infra-backup   # Backup
+
+# 或一次性部署所有
 mise run deploy-infra
-
-# 或分别部署
-mise run deploy-postgres
-mise run deploy-redis
-mise run deploy-caddy
-mise run deploy-backup
 ```
 
-### 3. 部署应用
+## 部署流程详解
 
-#### 后端应用（Docker 容器）
+### SSG 项目 (blog, storefront)
+
+**特点**：使用共享 Dockerfile，自动识别框架
 
 ```bash
-mise run deploy-hono
-mise run deploy-api
-mise run deploy-admin
+# 构建过程
+build.sh →
+  docker build -f docker/nodejs-ssg/Dockerfile --build-arg APP_NAME=blog →
+  推送到 ECR (912951144733.dkr.ecr.us-west-2.amazonaws.com/blog:VERSION)
+
+# 部署过程
+ansible deploy-ssg.yml →
+  sync docker-compose.yml →
+  pull image from ECR →
+  docker compose up -d --remove-orphans →
+  health check
 ```
 
-#### SSG 应用（静态文件）
+**支持的框架**：
+- Remix (输出: `build/client/`)
+- Next.js (输出: `out/`)
+- Vite (输出: `dist/`)
+
+### App 项目 (hono-demo, proxy)
+
+**特点**：自动运行数据库迁移
 
 ```bash
-mise run deploy-storefront
-mise run deploy-blog
-mise run deploy-marketing
+# 构建过程
+build.sh →
+  docker build →
+  推送到 ECR
+
+# 部署过程
+ansible deploy-app.yml →
+  sync files →
+  pull images →
+  run migrations (if exists) →
+  docker compose up -d --remove-orphans →
+  health check
 ```
 
-### 4. 回滚
+### Infra 服务
+
+#### Caddy - 智能配置重载
+
+**特点**：检测 Caddyfile 变更，自动优雅 reload
 
 ```bash
-# 后端应用回滚（零停机）
-mise run rollback-hono
-
-# SSG 应用回滚（瞬间完成）
-mise run rollback-storefront
+# 部署过程
+ansible deploy-infra-caddy.yml →
+  检测 Caddyfile checksum →
+  sync files →
+  docker compose up -d --remove-orphans →
+  if config changed: caddy reload (优雅重载) →
+  health check
 ```
 
-## 📦 服务分类
-
-### 三类服务的处理方式
-
-| 类型 | 示例 | 部署方式 | 特点 |
-|-----|------|---------|------|
-| **基础设施** | postgres, redis, caddy | Docker Compose | 有状态，直接重启 |
-| **后端应用** | hono-demo, api | Docker Compose + rollout | 无状态，零停机 |
-| **SSG 应用** | storefront, blog | 静态文件 + rsync | 纯静态，切换软链接 |
-
-## 🏗️ 服务器目录结构
-
-```
-/srv/studio/
-├── infra-apps/
-│   └── postgres/
-│       ├── 20251118143000/          # 版本化目录
-│       ├── 20251118140000/
-│       ├── 20251118135000/
-│       └── current -> 20251118143000/
-│
-├── js-apps/
-│   └── hono-demo/
-│       ├── 20251118144500/
-│       └── current -> 20251118144500/
-│
-└── ssg-apps/
-    └── storefront/
-        ├── 20251118145000/
-        └── current -> 20251118145000/
-
-/data/
-├── docker/         # Docker volumes
-├── postgres/       # PostgreSQL 数据
-├── redis/          # Redis 数据
-└── backups/        # 备份数据
-    ├── postgres/
-    └── redis/
+**手动 reload**：
+```bash
+ssh deploy@server "cd /srv/studio/infra-apps/caddy/current && ./reload.sh"
 ```
 
-## 🎯 新增服务指南
+#### PostgreSQL / Redis
 
-### 添加新的 SSG 应用
-
-1. **创建站点配置**：`infra-apps/caddy/src/sites/new-site.caddy`
-
-```caddy
-new-site.example.com {
-    import snippets/ssg-common.caddy /srv/studio/ssg-apps/new-site/current
-}
+**标准部署流程**：
+```bash
+ansible deploy-infra-{postgres,redis}.yml →
+  sync files →
+  docker compose up -d --remove-orphans →
+  health check
 ```
 
-2. **在服务器初始化时添加目录**：编辑 `ansible/init-server.yml`，在 SSG 应用列表中添加：
+#### Backup
 
-```yaml
-- /srv/studio/ssg-apps/new-site
-```
-
-3. **添加 mise 任务**：编辑 `mise.toml`
-
-```toml
-[tasks."build-new-site"]
-run = "bash js-apps/new-site/build.sh"
-
-[tasks."deploy-new-site"]
-depends = ["build-new-site"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=new-site"
-```
-
-4. **部署**
+**特点**：自动创建 /data/backups 目录
 
 ```bash
-mise run deploy-caddy      # 更新 Caddy 配置
-mise run deploy-new-site   # 部署新站点
+ansible deploy-infra-backup.yml →
+  create /data/backups →
+  sync files →
+  docker compose up -d --remove-orphans
 ```
 
-### 添加新的后端应用
+## 回滚策略
 
-1. **创建模板**：`js-apps/new-app/templates/docker-compose.prod.yml`
-
-2. **创建 build.sh**（参考 `js-apps/hono-demo/build.sh`）
-
-3. **在 mise.toml 中添加任务**
-
-4. **部署**：`mise run deploy-new-app`
-
-## 🔧 版本管理
-
-- **版本号格式**：`YYYYMMDDHHmmss`（如 `20251118143000`）
-- **自动保留**：服务器上只保留最近 3 个版本
-- **版本同步**：Docker 镜像 tag 和部署目录名使用相同版本号
-- **快速回滚**：切换软链接到上一个版本
-
-## 📝 常用命令
+**新策略**：不在服务器上回滚，在 CI 中重新部署旧版本
 
 ```bash
-# 查看所有任务
-mise tasks
+# 方式 1: 在 CI 中使用旧版本号
+VERSION=20250101120000 mise run deploy-ssg-blog
 
-# 构建但不部署
-mise run build-postgres
-mise run build-hono
-
-# 查看服务器日志
-ssh deploy@your-server.com "cd /srv/studio/js-apps/hono-demo/current && docker compose logs -f"
-
-# 查看服务器上的版本
-ssh deploy@your-server.com "ls -lt /srv/studio/js-apps/hono-demo/"
-
-# 手动清理旧版本
-ssh deploy@your-server.com "cd /srv/studio/js-apps/hono-demo && ls -t | grep '^[0-9]' | tail -n +4 | xargs rm -rf"
+# 方式 2: 使用 git 回退到旧 commit 再部署
+git checkout <old-commit>
+mise run deploy-ssg-blog
 ```
 
-## ⚙️ 配置说明
+**优势**：
+- 简化部署逻辑
+- 避免服务器存储多个版本
+- CI 有完整的部署历史
 
-### 环境变量管理
+## 健康检查
 
-所有生产环境变量从 AWS Parameter Store 拉取：
+所有服务都包含健康检查：
 
 ```bash
-# 参数路径格式
-/studio-prod/{service_name}/
-
-# 例如
-/studio-prod/postgres/
-/studio-prod/hono-demo/
-/studio-prod/storefront/
+# 等待容器进入 running 或 running (healthy) 状态
+# 最多重试 12 次，每次等待 5 秒
+docker compose ps <service> --format json | jq -r '.State'
 ```
 
-### Ansible 配置
+**失败处理**：
+- 显示容器日志（最近 50 行）
+- 部署失败并退出
 
-编辑 `ansible/inventory.yml` 设置服务器地址：
+## 版本管理
 
-```yaml
-all:
-  hosts:
-    production:
-      ansible_host: your-server.com
-      ansible_user: deploy
+- **版本格式**：`YYYYMMDDHHmmss` (例如: 20250121153000)
+- **版本保留**：只保留最近 3 个版本
+- **版本清理**：自动在部署结束时执行
+
+```bash
+# 在服务器上手动查看版本
+ssh deploy@server ls -la /srv/studio/ssg-apps/blog/
 ```
 
-## 🛠️ 故障排查
+## 环境变量
 
-### 构建失败
+### 开发环境
+```bash
+# 获取所有开发环境变量
+mise run dev-env
 
+# 或单独获取
+mise run dev-env-postgres
+mise run dev-env-redis
+mise run dev-env-hono
+```
+
+### 生产环境
+
+生产环境变量在 build.sh 中自动从 AWS Parameter Store 获取：
+```bash
+psenv -t .env.example -p "/studio-prod/" -o .env
+```
+
+## 故障排查
+
+### 镜像拉取失败
 ```bash
 # 检查 ECR 登录
-aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 912951144733.dkr.ecr.us-west-2.amazonaws.com
+aws ecr get-login-password --region us-west-2 | \
+  docker login --username AWS --password-stdin 912951144733.dkr.ecr.us-west-2.amazonaws.com
 
-# 检查 psenv 是否安装
-which psenv
+# 检查镜像是否存在
+aws ecr describe-images --repository-name blog --region us-west-2
 ```
 
-### 部署失败
-
-```bash
-# 检查 Ansible 连接
-ansible all -i ansible/inventory.yml -m ping
-
-# 查看详细日志
-ansible-playbook -i ansible/inventory.yml ansible/deploy-app.yml -e service_name=hono-demo -vvv
-```
-
-### 服务无法启动
-
+### 容器无法启动
 ```bash
 # SSH 到服务器查看日志
-ssh deploy@your-server.com
-cd /srv/studio/js-apps/hono-demo/current
-docker compose logs
+ssh deploy@server
+cd /srv/studio/ssg-apps/blog/current
+docker compose logs --tail=100
+
+# 检查容器状态
 docker compose ps
 ```
 
-## 📚 相关文档
+### Caddy reload 失败
+```bash
+# 验证配置语法
+docker compose exec caddy caddy validate --config /etc/caddy/Caddyfile
 
-- [Caddy 文档](https://caddyserver.com/docs/)
-- [Docker Rollout](https://github.com/Wowu/docker-rollout)
-- [Ansible 文档](https://docs.ansible.com/)
-- [mise 文档](https://mise.jdx.dev/)
+# 查看 Caddy 日志
+docker compose logs caddy --tail=50
 
-## 🔐 AWS 配置
+# 强制重启（最后手段）
+./restart.sh
+```
 
-### 服务器 AWS 凭证配置
+### 数据库迁移失败
+```bash
+# 查看迁移日志
+ssh deploy@server
+cd /srv/studio/js-apps/hono-demo/current
+docker compose --profile migrate run --rm hono-demo-migrate
 
-部署应用需要从 ECR 拉取镜像，因此服务器需要配置 AWS 凭证。
+# 手动回滚迁移
+docker compose exec postgres psql -U postgres -d your_db
+```
 
-**本项目使用的方案：**
+## 最佳实践
 
-AWS 凭证存储在 AWS Parameter Store，在服务器初始化时自动配置：
-
-1. **凭证存储位置**（已配置）：
-   - `/common/ECR_KEY_ID` - ECR 只读 IAM 用户的 Access Key ID
-   - `/common/ECR_KEY_SECRET` - ECR 只读 IAM 用户的 Secret Access Key
-
-2. **自动配置**：
+1. **测试后再部署**
    ```bash
-   # 运行服务器初始化时自动配置
-   mise run server-init
+   # 在本地测试 Docker 构建
+   docker build -f docker/nodejs-ssg/Dockerfile --build-arg APP_NAME=blog -t test:latest .
+   docker run -p 8080:80 test:latest
    ```
 
-3. **单独配置**（如果需要更新凭证）：
+2. **使用 CI/CD**
+   - 在 CI 中运行 `mise run build-*`
+   - 成功后运行 `mise run deploy-*`
+   - 失败时自动通知
+
+3. **监控部署**
    ```bash
-   # 仅配置 AWS 凭证
-   mise run server-configure-aws
+   # 实时查看部署日志
+   ansible-playbook ... | tee deploy.log
+
+   # 部署后检查服务状态
+   ssh deploy@server "cd /srv/studio/ssg-apps/blog/current && docker compose ps"
    ```
 
-**工作原理：**
-- Ansible 从 Parameter Store 读取凭证（`/common/ECR_KEY_ID` 和 `/common/ECR_KEY_SECRET`）
-- 自动配置到服务器 `~/.aws/credentials` 和 `~/.aws/config`
-- 所有 ECR 操作（`docker pull`、`aws ecr get-login-password`）自动使用这些凭证
+4. **Caddy 配置更新**
+   - 先在本地测试配置
+   - 使用 `caddy validate` 验证
+   - 部署时自动 reload，无需重启
 
-**优势：**
-- ✅ 凭证集中管理在 AWS Parameter Store
-- ✅ 自动化部署，无需手动配置
-- ✅ 最小权限（只读 ECR）
-- ✅ 凭证轮转只需更新 Parameter Store，重新运行 `server-configure-aws`
+5. **数据库备份**
+   ```bash
+   # 在升级前备份
+   mise run server-backup
 
----
+   # 查看备份
+   mise run server-backup-list
+   ```
 
-### 其他方案（可选）
+## 参考
 
-#### 方式 1：IAM Instance Role（仅适用于 EC2）
-
-如果服务器是 EC2 实例，可以使用 IAM Role：
-
-1. 创建 IAM Role，附加策略：`AmazonEC2ContainerRegistryReadOnly`
-2. 将 Role 附加到 EC2 实例
-3. 无需配置凭证，自动生效
-
-#### 方式 2：手动配置（不推荐）
-
-在服务器上手动配置 AWS 凭证：
-
-```bash
-ssh deploy@your-server
-aws configure
-```
-
-
-## 🔧 数据库管理
-
-### 运行数据库迁移
-
-在部署应用之前，先运行数据库迁移：
-
-```bash
-# 运行所有待执行的迁移
-mise run db-migrate
-```
-
-这个命令会：
-1. 从 Parameter Store 获取数据库凭证
-2. 同步迁移脚本到服务器
-3. 在服务器上运行 `db-admin` 容器执行迁移
-4. 自动退出
-
-**注意：** db-admin 是一次性任务，运行完成后容器会自动退出。
-
----
-
-## 🔄 备份服务
-
-### 部署备份服务
-
-备份服务会定时备份 PostgreSQL 和 Redis：
-
-```bash
-# 构建并部署备份服务
-mise run deploy-backup
-```
-
-备份服务的调度：
-- PostgreSQL 备份：每天凌晨 2:00
-- Redis 备份：每天凌晨 3:00
-- 清理旧备份：每天凌晨 5:00
-- 完整备份：每周日凌晨 4:00
-
-备份位置：
-- 本地：`/data/backups/` (保留 7 天)
-- S3：配置的 S3 存储桶 (保留 90 天)
-
-### 手动触发备份
-
-```bash
-# SSH 到服务器
-ssh deploy@your-server
-
-# 手动运行 PostgreSQL 备份
-docker exec current-backup-1 /usr/local/bin/backup-postgres.sh
-
-# 手动运行 Redis 备份
-docker exec current-backup-1 /usr/local/bin/backup-redis.sh
-```
-
+- [MIGRATION.md](./MIGRATION.md) - 迁移指南和改进详情
+- [docker/nodejs-ssg/README.md](./docker/nodejs-ssg/README.md) - 共享 Dockerfile 详细说明
+- [mise.toml](./mise.toml) - 所有可用的任务命令

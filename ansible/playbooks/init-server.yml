@@ -26,6 +26,18 @@
       when: common_packages is defined and common_packages | length > 0
       tags: [packages, common]
 
+    # =====================================
+    # 设置 /srv 目录权限
+    # =====================================
+    - name: Set /srv directory ownership to deploy user
+      file:
+        path: /srv
+        state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
+        mode: '0755'
+      tags: [directories]
+
 # 2. 挂载数据盘
 - import_playbook: mount.yml
   tags: [mount]

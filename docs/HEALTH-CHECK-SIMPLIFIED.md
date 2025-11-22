@@ -146,7 +146,7 @@ services:
   app:
     image: myapp:latest
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 10s      # 每 10 秒检查一次
       timeout: 5s        # 单次检查超时 5 秒
       retries: 3         # 失败 3 次才标记为 unhealthy

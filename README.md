@@ -65,6 +65,42 @@ make dev
 
 详细部署文档请查看 [DEPLOYMENT.md](./DEPLOYMENT.md)
 
+### AWS ECR 设置
+
+请在 ECR 编辑 JSON Rule 规则：
+
+```
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "删除3天前的未标记镜像",
+      "selection": {
+        "tagStatus": "untagged",
+        "countType": "sinceImagePushed",
+        "countUnit": "days",
+        "countNumber": 3
+      },
+      "action": {
+        "type": "expire"
+      }
+    },
+    {
+      "rulePriority": 2,
+      "description": "保留最新5个标记镜像",
+      "selection": {
+        "tagStatus": "any",
+        "countType": "imageCountMoreThan",
+        "countNumber": 5
+      },
+      "action": {
+        "type": "expire"
+      }
+    }
+  ]
+}
+```
+
 ### 快速开始
 
 #### 0. 准备工作
@@ -108,13 +144,8 @@ mise run deploy-storefront
 
 #### 4. 回滚
 
-```bash
-# 后端应用回滚到上一版本
-mise run rollback-hono
+在 git 切换到某个 commit, 然后重新 deploy.
 
-# SSG 应用回滚
-mise run rollback-storefront
-```
 
 ### 服务器目录结构
 

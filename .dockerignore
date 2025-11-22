@@ -5,6 +5,7 @@ node_modules
 
 # Build outputs
 dist
+deploy-dist
 build
 out
 .next

@@ -3,94 +3,78 @@
   hosts: all
   become: yes
   become_user: deploy
+  gather_facts: no
 
   vars:
     service_name: "{{ service_name }}"
     local_dist: "{{ playbook_dir }}/../../js-apps/{{ service_name }}/deploy-dist"
-    remote_base: "/srv/studio/ssg-apps/{{ service_name }}"
+    remote_dir: "/srv/studio/js-apps/{{ service_name }}"
 
   tasks:
-    - name: Read version
-      slurp:
-        src: "{{ local_dist }}/version.txt"
-      delegate_to: localhost
-      become: no  # 在本地读取文件，不需要 become
-      register: version_file
-
-    - name: Set version
-      set_fact:
-        version: "{{ version_file.content | b64decode | trim }}"
-
     - debug:
-        msg: "🚀 Deploying SSG {{ service_name }} version {{ version }}"
+        msg: "🚀 Deploying SSG {{ service_name }}"
 
-    - name: Ensure /srv/studio base directory exists
+    - name: Ensure service directory exists
       file:
-        path: /srv/studio
-        state: directory
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0755'
-      become_user: root
-
-    - name: Ensure ssg-apps directory exists
-      file:
-        path: /srv/studio/ssg-apps
-        state: directory
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0755'
-      become_user: root
-
-    - name: Ensure service base directory exists
-      file:
-        path: "{{ remote_base }}"
+        path: "{{ remote_dir }}"
         state: directory
         mode: '0755'
 
-    - name: Create version directory
-      file:
-        path: "{{ remote_base }}/{{ version }}"
-        state: directory
-        mode: '0755'
-
-    - name: Sync static files
+    # ===== Sync files =====
+    - name: Sync deploy-dist to server
       synchronize:
         src: "{{ local_dist }}/"
-        dest: "{{ remote_base }}/{{ version }}/"
+        dest: "{{ remote_dir }}/"
         delete: yes
-        rsync_opts:
-          - "--exclude=version.txt"
-          - "--exclude=.deploy-meta"
 
-    - name: Copy metadata
-      synchronize:
-        src: "{{ local_dist }}/.deploy-meta"
-        dest: "{{ remote_base }}/{{ version }}/"
+    # ===== Docker operations =====
+    - name: Login to ECR
+      shell: |
+        aws ecr get-login-password --region {{ ecr_region }} | \
+          docker login --username AWS --password-stdin {{ ecr_registry }}
+      environment:
+        AWS_DEFAULT_REGION: "{{ ecr_region }}"
+      changed_when: false
 
-    - name: Update current symlink (atomic operation)
-      file:
-        src: "{{ remote_base }}/{{ version }}"
-        dest: "{{ remote_base }}/current"
-        state: link
-        force: yes
-
-    - name: Verify deployment
-      stat:
-        path: "{{ remote_base }}/current/index.html"
-      register: index_check
-      failed_when: not index_check.stat.exists
+    - name: Pull and restart
+      shell: |
+        cd {{ remote_dir }}
+        docker compose pull --quiet
+        docker compose up -d --remove-orphans
+      register: deploy_result
 
     - debug:
-        msg: "✅ {{ service_name }} deployed successfully ({{ version }})"
+        msg: "{{ deploy_result.stdout_lines }}"
 
-    - name: Keep only latest 3 versions
+    # ===== Health check =====
+    - name: Wait for container to be healthy
       shell: |
-        cd {{ remote_base }}
-        ls -t | grep -E '^[0-9]{14}$' | tail -n +4 | xargs -r rm -rf
+        cd {{ remote_dir }}
+        docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
+      register: container_state
+      until: container_state.stdout == "running" or container_state.stdout == "running (healthy)"
+      retries: 12
+      delay: 5
+      failed_when: false
 
-    - name: Show disk usage
-      shell: du -sh {{ remote_base }}/*/
-      register: disk_usage
+    - name: Get container logs if deployment failed
+      shell: |
+        cd {{ remote_dir }}
+        docker compose logs --tail=50 {{ service_name }}
+      register: container_logs
+      when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
 
-    - debug: var=disk_usage.stdout_lines
+    - name: Display container logs
+      debug:
+        msg: "{{ container_logs.stdout_lines }}"
+      when: container_logs is defined and container_logs.stdout_lines is defined
+
+    - name: Fail if deployment unsuccessful
+      fail:
+        msg: "❌ Deployment of {{ service_name }} failed! Check logs above."
+      when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
+
+    - name: Display success message
+      debug:
+        msg: "✅ Successfully deployed {{ service_name }}"
+      when: container_state.stdout == "running" or container_state.stdout == "running (healthy)"

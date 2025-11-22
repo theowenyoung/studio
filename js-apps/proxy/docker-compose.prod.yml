@@ -7,7 +7,7 @@ services:
     networks:
       - shared
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/?_host=example.com"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/?_host=owenyoung.com"]
       interval: 30s
       timeout: 10s
       retries: 3

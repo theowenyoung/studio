@@ -1,18 +1,18 @@
 ---
-- name: Deploy Application Service
+- name: Deploy Redis Infrastructure
   hosts: all
   become: yes
   become_user: deploy
   gather_facts: no
 
   vars:
-    service_name: "{{ service_name }}"
-    local_dist: "{{ playbook_dir }}/../../js-apps/{{ service_name }}/deploy-dist"
-    remote_dir: "/srv/studio/js-apps/{{ service_name }}"
+    service_name: "redis"
+    local_dist: "{{ playbook_dir }}/../../infra-apps/redis/deploy-dist"
+    remote_dir: "/srv/studio/infra-apps/redis"
 
   tasks:
     - debug:
-        msg: "🚀 Deploying {{ service_name }}"
+        msg: "🚀 Deploying Redis"
 
     - name: Ensure service directory exists
       file:
@@ -35,45 +35,16 @@
       environment:
         AWS_DEFAULT_REGION: "{{ ecr_region }}"
       changed_when: false
+      when: ecr_registry is defined
 
     - name: Pull new images
       shell: |
         cd {{ remote_dir }}
         docker compose pull --quiet
       register: pull_result
-      changed_when: false
+      changed_when: pull_result.stdout != ""
 
-    # ===== Database migrations (optional) =====
-    - name: Check if migrations service exists
-      shell: |
-        cd {{ remote_dir }}
-        docker compose --profile migrate config --services 2>/dev/null | grep -q "{{ service_name }}-migrate"
-      register: has_migrations
-      failed_when: false
-      changed_when: false
-
-    - name: Run database migrations
-      shell: |
-        cd {{ remote_dir }}
-        docker compose --profile migrate run --rm {{ service_name }}-migrate
-      register: migrate_result
-      when: has_migrations.rc == 0
-
-    - name: Display migration output
-      debug:
-        msg: "{{ migrate_result.stdout_lines | default([]) }}"
-      when: has_migrations.rc == 0 and migrate_result.stdout_lines is defined
-
-    - name: Fail if migrations failed
-      fail:
-        msg: "❌ Database migrations failed! Exit code: {{ migrate_result.rc }}"
-      when:
-        - has_migrations.rc == 0
-        - migrate_result.rc is defined
-        - migrate_result.rc != 0
-
-    # ===== Deploy service =====
-    - name: Docker compose up with remove-orphans
+    - name: Docker compose up
       shell: |
         cd {{ remote_dir }}
         docker compose up -d --remove-orphans
@@ -82,11 +53,27 @@
     - debug:
         msg: "{{ deploy_result.stdout_lines }}"
 
-    # ===== Health check =====
-    - name: Wait for container to be healthy
+    - name: Check if service was restarted
+      set_fact:
+        service_restarted: "{{ 'Recreated' in deploy_result.stdout or 'Started' in deploy_result.stdout or 'Created' in deploy_result.stdout }}"
+
+    - name: Force restart if no changes detected
       shell: |
         cd {{ remote_dir }}
-        docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
+        docker compose restart {{ service_name }}
+      when: not service_restarted
+      register: force_restart_result
+
+    - name: Display force restart message
+      debug:
+        msg: "🔄 No changes detected, forced restart of {{ service_name }}"
+      when: not service_restarted
+
+    # ===== Health check =====
+    - name: Wait for Redis to be healthy
+      shell: |
+        cd {{ remote_dir }}
+        docker compose ps redis --format json 2>/dev/null | jq -r '.State // empty' | head -1
       register: container_state
       until: container_state.stdout == "running" or container_state.stdout == "running (healthy)"
       retries: 12
@@ -96,7 +83,7 @@
     - name: Get container logs if deployment failed
       shell: |
         cd {{ remote_dir }}
-        docker compose logs --tail=50 {{ service_name }}
+        docker compose logs --tail=50 redis
       register: container_logs
       when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
 
@@ -107,10 +94,10 @@
 
     - name: Fail if deployment unsuccessful
       fail:
-        msg: "❌ Deployment of {{ service_name }} failed! Check logs above."
+        msg: "❌ Deployment of Redis failed! Check logs above."
       when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
 
     - name: Display success message
       debug:
-        msg: "✅ Successfully deployed {{ service_name }}"
+        msg: "✅ Successfully deployed Redis"
       when: container_state.stdout == "running" or container_state.stdout == "running (healthy)"

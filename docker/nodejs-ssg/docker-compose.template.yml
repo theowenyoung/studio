@@ -1,0 +1,10 @@
+services:
+  ${SERVICE_NAME}:
+    image: ${IMAGE_TAG}
+    restart: unless-stopped
+    networks:
+      - shared
+
+networks:
+  shared:
+    external: true

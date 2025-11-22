@@ -12,23 +12,15 @@ echo "🔨 Building $SERVICE_NAME (version: $VERSION)"
 rm -rf "$SCRIPT_DIR/$DEPLOY_DIST"
 mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 
-# 1. 获取环境变量
+# 获取环境变量
 echo "🔐 Fetching environment variables from AWS Parameter Store..."
 psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 
-# 2. 复制 docker-compose 配置
-if [ -f "$SCRIPT_DIR/docker-compose.prod.yml" ]; then
-  cp "$SCRIPT_DIR/docker-compose.prod.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
-else
-  cp "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
-fi
+# 复制所有必要文件
+cp "$SCRIPT_DIR/docker-compose.prod.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
+cp -r "$SCRIPT_DIR/src/config" "$SCRIPT_DIR/$DEPLOY_DIST/"
 
-# 3. 复制配置文件（如果有）
-if [ -f "$SCRIPT_DIR/redis.conf" ]; then
-  cp "$SCRIPT_DIR/redis.conf" "$SCRIPT_DIR/$DEPLOY_DIST/"
-fi
-
-# 4. 写入版本号
+# 写入版本号
 echo "$VERSION" > "$SCRIPT_DIR/$DEPLOY_DIST/version.txt"
 
 echo "✅ $SERVICE_NAME built: $SCRIPT_DIR/$DEPLOY_DIST"

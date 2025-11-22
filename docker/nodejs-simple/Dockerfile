@@ -5,7 +5,7 @@
 # docker build -f docker/nodejs-simple/Dockerfile \
 #   --build-arg APP_PATH=js-apps/proxy \
 #   --build-arg EXPOSE_PORT=8002 \
-#   --build-arg START_CMD="node index.mjs" \
+#   --build-arg START_CMD="node src/index.mjs" \
 #   -t your-repo/proxy:latest .
 
 # ---------- Base ----------
@@ -57,12 +57,12 @@ RUN addgroup --system --gid 1001 nodejs \
 # 从 deps 导入"已裁剪的"产物
 COPY --from=deps --chown=appuser:nodejs /out/ /app/
 
-# 暴露端口（生产环境统一使用 8000）
-ARG EXPOSE_PORT=8000
+# 暴露端口（生产环境统一使用 3000）
+ARG EXPOSE_PORT=3000
 EXPOSE ${EXPOSE_PORT}
 
 USER appuser
 
 # 默认启动命令（会被 docker-compose.yml 的 command 覆盖）
-# 对于简单应用，通常是 node index.js 或 node index.mjs
-CMD ["node", "index.mjs"]
+# 对于简单应用，通常是 node index.js 或 node src/index.mjs
+CMD ["node", "src/index.mjs"]

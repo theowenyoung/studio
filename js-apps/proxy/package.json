@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "",
-  "main": "index.mjs",
+  "main": "src/index.mjs",
   "scripts": {
-    "dev": "node --watch index.mjs",
+    "dev": "node --watch src/index.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

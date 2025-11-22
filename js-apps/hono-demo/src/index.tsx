@@ -225,8 +225,8 @@ if (process.env.NODE_ENV === 'production') {
   // 先初始化数据库
   await initialize()
 
-  // 生产环境默认使用 8000，可通过 PORT 环境变量覆盖
-  const port = process.env.PORT ? parseInt(process.env.PORT) : 8000
+  // 生产环境默认使用 3000，可通过 PORT 环境变量覆盖
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
   serve({
     fetch: app.fetch,
     port

@@ -349,6 +349,9 @@ importers:
 
   js-packages/ui:
     dependencies:
+      '@swc/helpers':
+        specifier: ^0.5.15
+        version: 0.5.17
       '@types/react':
         specifier: '>=18'
         version: 19.2.6
@@ -3082,7 +3085,6 @@ packages:
     resolution: {integrity: sha512-5IKx/Y13RsYd+sauPb2x+U/xZikHjolzfuDgTAl/Tdf3Q8rslRvC19NKDLgAJQ6wsqADk10ntlv08nPFw/gO/A==}
     dependencies:
       tslib: 2.8.1
-    dev: true
 
   /@swc/types@0.1.25:
     resolution: {integrity: sha512-iAoY/qRhNH8a/hBvm3zKj9qQ4oc2+3w1unPJa2XvTK3XjeLXtzcCingVPw/9e5mn1+0yPqxcBGp9Jf0pkfMb1g==}

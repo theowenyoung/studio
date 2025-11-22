@@ -40,6 +40,9 @@
   "jest": {
     "preset": "@repo/jest-presets/browser"
   },
+  "dependencies": {
+    "@swc/helpers": "^0.5.15"
+  },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
     "@repo/eslint-config": "workspace:*",

@@ -80,6 +80,7 @@
       become_user: "{{ deploy_user | default('deploy') }}"
       tags: [network]
 
+
     # =====================================
     # 安装 docker-rollout 零停机部署工具
     # =====================================

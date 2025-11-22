@@ -21,10 +21,29 @@ run = 'pnpm --filter "hono-demo" dev'
 description = "Start proxy development server"
 run = 'pnpm --filter "proxy" dev'
 
+[tasks.dev-api]
+description = "Start api development server"
+run = 'pnpm --filter "api" dev'
+
 [tasks.dev-all]
 description = "Start all development servers"
 alias = "dev"
 run = 'pnpm --parallel --filter "./js-apps/*" dev'
+
+[tasks.dev-kill]
+description = "Kill all development servers (cleanup after Ctrl+C)"
+run = '''
+echo "🔪 Killing all development servers..."
+# 杀死常见的开发服务器进程
+pkill -f "vite" || true
+pkill -f "remix dev" || true
+pkill -f "next dev" || true
+pkill -f "node.*dev" || true
+pkill -f "tsx watch" || true
+# 杀死占用常见开发端口的进程
+lsof -ti:3000,3001,5173,8001,8002,8003,9001,9002,9003 | xargs kill -9 2>/dev/null || true
+echo "✅ All development servers killed"
+'''
 
 [tasks.dev-init]
 description = "Initialize local environment (create Docker network)"
@@ -169,24 +188,23 @@ run = "bash infra-apps/caddy/build.sh"
 
 [tasks.build-infra-backup]
 description = "Build backup infrastructure"
-run = "bash infra-apps/backup/build-prod.sh"
+run = "bash infra-apps/backup/build.sh"
 
-# 应用构建
-[tasks.build-app-hono]
+# JS 应用构建
+[tasks.build-hono-demo]
 description = "Build hono-demo application"
 run = "bash js-apps/hono-demo/build.sh"
 
-[tasks.build-app-proxy]
+[tasks.build-proxy]
 description = "Build proxy application"
 run = "bash js-apps/proxy/build.sh"
 
-# SSG 构建
-[tasks.build-ssg-blog]
-description = "Build blog static site"
+[tasks.build-blog]
+description = "Build blog application"
 run = "bash js-apps/blog/build.sh"
 
-[tasks.build-ssg-storefront]
-description = "Build storefront static site"
+[tasks.build-storefront]
+description = "Build storefront application"
 run = "bash js-apps/storefront/build.sh"
 
 # ==================== 部署 (deploy-) ====================
@@ -199,52 +217,54 @@ depends = ["deploy-infra-postgres", "deploy-infra-redis", "deploy-infra-caddy", 
 [tasks.deploy-infra-postgres]
 description = "Deploy PostgreSQL to production"
 depends = ["build-infra-postgres"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=postgres"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-postgres.yml"
+alias = "deploy-postgres"
 
 [tasks.deploy-infra-redis]
 description = "Deploy Redis to production"
 depends = ["build-infra-redis"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=redis"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-redis.yml"
+alias = "deploy-redis"
 
 [tasks.deploy-infra-caddy]
 description = "Deploy Caddy to production"
 depends = ["build-infra-caddy"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=caddy"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy.yml"
 alias = "deploy-caddy"
 
 [tasks.deploy-infra-backup]
 description = "Deploy backup service to production"
 depends = ["build-infra-backup"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra.yml -e service_name=backup"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-backup.yml"
 
-# 应用部署
-[tasks.deploy-app-hono-demo]
+# JS 应用部署
+[tasks.deploy-hono-demo]
 description = "Deploy hono-demo to production"
-depends = ["build-app-hono"]
+depends = ["build-hono-demo"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=hono-demo"
 alias = "deploy-hono"
 
-[tasks.deploy-app-proxy]
+[tasks.deploy-proxy]
 description = "Deploy proxy to production"
-depends = ["build-app-proxy"]
+depends = ["build-proxy"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=proxy"
 
-# SSG 部署
-[tasks.deploy-ssg-blog]
+[tasks.deploy-blog]
 description = "Deploy blog to production"
-depends = ["build-ssg-blog"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=blog"
+depends = ["build-blog"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=blog"
 
-[tasks.deploy-ssg-storefront]
+[tasks.deploy-storefront]
 description = "Deploy storefront to production"
-depends = ["build-ssg-storefront"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-ssg.yml -e service_name=storefront"
+depends = ["build-storefront"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=storefront"
 
 # 数据库迁移部署
-[tasks.deploy-db-admin]
+[tasks.deploy-infra-db-admin]
 description = "Run database migrations in production"
 depends = ["build-db-admin"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-db-admin.yml"
+alias = "deploy-db-admin"
 
 [tasks.deploy-migrate-hono]
 description = "Run hono-demo migrations in production"
@@ -335,27 +355,7 @@ description = "Smart clean S3 backups (3-2-1 retention)"
 run = 'docker compose run --rm backup /usr/local/bin/cleanup-s3-smart.sh'
 dir = "infra-apps/backup"
 
-# 回滚相关
-[tasks.server-rollback-app-hono]
-description = "Rollback hono-demo to previous version"
-run = '''
-ansible all -i ansible/inventory.yml --become --become-user=deploy -m shell -a "
-  cd /srv/studio/js-apps/hono-demo && \
-  PREV=\$(ls -t | grep '^[0-9]\{14\}$' | sed -n 2p) && \
-  ln -sfn \$PREV current && \
-  cd current && docker compose up -d
-"
-'''
-
-[tasks.server-rollback-ssg-storefront]
-description = "Rollback storefront to previous version"
-run = '''
-ansible all -i ansible/inventory.yml --become --become-user=deploy -m shell -a "
-  cd /srv/studio/ssg-apps/storefront && \
-  PREV=\$(ls -t | grep '^[0-9]\{14\}$' | sed -n 2p) && \
-  ln -sfn \$PREV current
-"
-'''
+# 回滚相关 - 已移除，请在 CI 中重新部署旧版本即可
 
 # ==================== 通用工具 (无前缀) ====================
 

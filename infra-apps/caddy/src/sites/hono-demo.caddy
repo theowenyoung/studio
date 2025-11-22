@@ -1,3 +1,0 @@
-hono-demo.owenyoung.com {
-    import ../snippets/proxy-common.caddy hono-demo:8000
-}

@@ -3,83 +3,61 @@
   hosts: all
   become: yes
   become_user: deploy
+  gather_facts: no
 
   vars:
     service_name: "db-admin"
-    local_dist: "{{ playbook_dir }}/../../infra-apps/{{ service_name }}/deploy-dist"
-    remote_base: "/srv/studio/infra-apps/{{ service_name }}"
+    local_dist: "{{ playbook_dir }}/../../infra-apps/db-admin/deploy-dist"
+    remote_dir: "/srv/studio/infra-apps/db-admin"
 
   tasks:
-    - name: Read version
-      slurp:
-        src: "{{ local_dist }}/version.txt"
-      delegate_to: localhost
-      become: no
-      register: version_file
-
-    - name: Set version
-      set_fact:
-        version: "{{ version_file.content | b64decode | trim }}"
-
     - debug:
-        msg: "🚀 Running database migrations (version {{ version }})"
+        msg: "🚀 Running database migrations"
 
-    - name: Ensure /srv/studio base directory exists
+    - name: Ensure service directory exists
       file:
-        path: /srv/studio
-        state: directory
-        owner: "{{ deploy_user | default('deploy') }}"
-        group: "{{ deploy_user | default('deploy') }}"
-        mode: '0755'
-      become_user: root
-
-    - name: Ensure service base directory exists
-      file:
-        path: "{{ remote_base }}"
+        path: "{{ remote_dir }}"
         state: directory
         mode: '0755'
 
-    - name: Create version directory
-      file:
-        path: "{{ remote_base }}/{{ version }}"
-        state: directory
-        mode: '0755'
-
-    - name: Sync files
+    # ===== Sync files =====
+    - name: Sync deploy-dist to server
       synchronize:
         src: "{{ local_dist }}/"
-        dest: "{{ remote_base }}/{{ version }}/"
-        delete: no
-        rsync_opts:
-          - "--exclude=.git"
+        dest: "{{ remote_dir }}/"
+        delete: yes
 
-    - name: Update current symlink
-      file:
-        src: "{{ remote_base }}/{{ version }}"
-        dest: "{{ remote_base }}/current"
-        state: link
-        force: yes
+    # ===== Docker operations =====
+    - name: Login to ECR
+      shell: |
+        aws ecr get-login-password --region {{ ecr_region }} | \
+          docker login --username AWS --password-stdin {{ ecr_registry }}
+      environment:
+        AWS_DEFAULT_REGION: "{{ ecr_region }}"
+      changed_when: false
+      when: ecr_registry is defined
+
+    - name: Pull new images
+      shell: |
+        cd {{ remote_dir }}
+        docker compose pull --quiet
+      register: pull_result
+      changed_when: pull_result.stdout != ""
 
     - name: Run migrations
       shell: |
-        cd {{ remote_base }}/current
-        docker compose up --abort-on-container-exit
-      register: result
+        cd {{ remote_dir }}
+        docker compose run --rm db-admin
+      register: migration_result
 
-    - name: Display migration output
-      debug:
-        var: result.stdout_lines
+    - debug:
+        msg: "{{ migration_result.stdout_lines }}"
 
     - name: Check migration status
       fail:
-        msg: "Migration failed!"
-      when: result.rc != 0
+        msg: "❌ Database migrations failed!"
+      when: migration_result.rc != 0
 
     - name: Success message
       debug:
         msg: "✅ Database migrations completed successfully"
-
-    - name: Keep only latest 3 versions
-      shell: |
-        cd {{ remote_base }}
-        ls -t | grep -E '^[0-9]{14}$' | tail -n +4 | xargs -r rm -rf

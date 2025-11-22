@@ -1,4 +1,0 @@
-# Storefront 站点配置
-storefront-demo.owenyoung.com {
-    import ../snippets/ssg-common.caddy /srv/studio/ssg-apps/storefront/current
-}

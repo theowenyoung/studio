@@ -27,5 +27,29 @@
     }
 }
 
-# 导入所有站点配置
-import sites/*.caddy
+# ==================== SSG Sites (nginx containers) ====================
+# Blog
+blog-demo.owenyoung.com {
+    reverse_proxy blog:3000
+}
+
+# Storefront
+storefront-demo.owenyoung.com {
+    reverse_proxy storefront:3000
+}
+
+# ==================== Application Services ====================
+# API
+api-demo.owenyoung.com {
+    reverse_proxy api:3000
+}
+
+# Hono Demo
+hono-demo.owenyoung.com {
+    reverse_proxy hono-demo:3000
+}
+
+# Proxy
+proxy-demo.owenyoung.com {
+    reverse_proxy proxy:3000
+}

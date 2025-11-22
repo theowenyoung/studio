@@ -1,4 +1,0 @@
-# Proxy 服务配置
-proxy-demo.owenyoung.com {
-    import ../snippets/proxy-common.caddy proxy:8000
-}

@@ -17,15 +17,11 @@ echo "🔐 Fetching environment variables from AWS Parameter Store..."
 psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 
 # 2. 复制 docker-compose 配置
-if [ -f "$SCRIPT_DIR/docker-compose.prod.yml" ]; then
-  cp "$SCRIPT_DIR/docker-compose.prod.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
-else
-  cp "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
-fi
+cp "$SCRIPT_DIR/docker-compose.prod.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
 
-# 3. 复制配置文件
-cp "$SCRIPT_DIR/postgresql.conf" "$SCRIPT_DIR/$DEPLOY_DIST/"
-cp -r "$SCRIPT_DIR/initdb.d" "$SCRIPT_DIR/$DEPLOY_DIST/"
+# 3. 复制配置目录和初始化脚本
+cp -r "$SCRIPT_DIR/src/config" "$SCRIPT_DIR/$DEPLOY_DIST/"
+cp -r "$SCRIPT_DIR/src/initdb.d" "$SCRIPT_DIR/$DEPLOY_DIST/"
 
 # 4. 写入版本号
 echo "$VERSION" >"$SCRIPT_DIR/$DEPLOY_DIST/version.txt"

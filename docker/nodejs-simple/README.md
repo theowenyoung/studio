@@ -41,7 +41,7 @@
 docker build -f docker/nodejs-simple/Dockerfile \
   --build-arg APP_PATH=js-apps/proxy \
   --build-arg EXPOSE_PORT=8002 \
-  --build-arg START_CMD="node index.mjs" \
+  --build-arg START_CMD="node src/index.mjs" \
   -t your-repo/proxy:latest .
 ```
 
@@ -65,7 +65,7 @@ source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 SERVICE_NAME="proxy"
 APP_PATH="js-apps/proxy"
 PORT="8002"
-START_CMD="node index.mjs"
+START_CMD="node src/index.mjs"
 VERSION="$(get_version)"
 
 IMAGE="$ECR_REGISTRY/studio/$SERVICE_NAME"
@@ -134,7 +134,7 @@ build_and_push_image \
 ```json
 {
   "name": "proxy",
-  "main": "index.mjs",
+  "main": "src/index.mjs",
   "type": "module",
   "dependencies": {
     "hono": "^4.10.3"

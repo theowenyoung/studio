@@ -9,9 +9,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./initdb.d:/docker-entrypoint-initdb.d:ro
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf:ro
-      - postgres_data:/var/lib/postgresql/data  # 使用命名卷
+      - ./src/initdb.d:/docker-entrypoint-initdb.d:ro
+      - ./src/config:/etc/postgresql:ro
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 10s
@@ -21,10 +21,15 @@ services:
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     networks:
       - shared
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
-  postgres_data:  # 定义命名卷
+  postgres_data:
+
 networks:
   shared:
-    driver: bridge
     external: true
