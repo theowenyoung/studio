@@ -103,6 +103,8 @@ make dev
 
 ### 快速开始
 
+#### 0. 在 <https://www.hetzner.com/> 创建服务器，并且绑定一个大小大于 10G volume, 用于所有的数据存储。
+
 #### 0. 准备工作
 
 ```bash
@@ -123,7 +125,7 @@ mise run server-init
 #### 2. 部署基础设施
 
 ```bash
-# 一次性部署所有基础设施（postgres, redis, caddy, backup）
+# 一次性部署所有基础设施（postgres, redis, caddy, backup, 数据库）
 mise run deploy-infra
 
 # 或分别部署

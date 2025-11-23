@@ -4,7 +4,7 @@
 # =====================================
 - name: Setup Docker Environment and Tools
   hosts: all
-  gather_facts: yes
+  gather_facts: no  # 使用缓存的 facts
   become: yes
   
   tasks:
@@ -67,8 +67,12 @@
       tags: [docker-service]
 
     - name: Wait for Docker to be ready
-      pause:
-        seconds: 5
+      command: docker info
+      register: docker_ready
+      until: docker_ready.rc == 0
+      retries: 10
+      delay: 2
+      changed_when: false
       tags: [docker-service]
 
     - name: Create shared Docker network for all services

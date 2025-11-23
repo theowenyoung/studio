@@ -6,23 +6,39 @@
 - name: Bootstrap system
   hosts: all
   become: yes
-  gather_facts: yes
+  gather_facts: yes  # 只在第一个 play 收集 facts
+  strategy: free     # 允许任务并行执行
 
   roles:
     - role: robertdebock.bootstrap
       tags: [bootstrap]
 
+    # 系统更新通常很慢，改为可选（使用 --tags update 显式启用）
     - role: robertdebock.update
-      tags: [update]
+      tags: [update, never]  # 添加 never 标签，默认跳过
+      when: force_system_update | default(false)
 
   post_tasks:
-    # 安装常用工具包
+    # 安装常用工具包（异步执行，不阻塞后续任务）
     - name: Install common packages
       apt:
         name: "{{ common_packages }}"
         state: present
         update_cache: yes
         cache_valid_time: 3600  # 如果 apt 缓存在 1 小时内有效，跳过 update（节省时间）
+      when: common_packages is defined and common_packages | length > 0
+      async: 300  # 最多等待 5 分钟
+      poll: 0     # 异步执行，不等待完成
+      register: install_packages
+      tags: [packages, common]
+
+    - name: Wait for package installation
+      async_status:
+        jid: "{{ install_packages.ansible_job_id }}"
+      register: job_result
+      until: job_result.finished
+      retries: 60
+      delay: 5
       when: common_packages is defined and common_packages | length > 0
       tags: [packages, common]
 
@@ -50,7 +66,7 @@
 - name: Install Docker
   hosts: all
   become: yes
-  gather_facts: yes
+  gather_facts: no  # 使用缓存的 facts
 
   roles:
     - role: geerlingguy.docker
@@ -72,7 +88,15 @@
 - import_playbook: configure-aws-credentials.yml
   tags: [aws-credentials]
 
-# 7. 验证所有服务
+# 7. 安装和配置 mise（服务器任务管理）
+- import_playbook: setup-mise.yml
+  tags: [mise-setup]
+
+# 8. 同步服务器配置文件（mise tasks 和 bash aliases）
+- import_playbook: sync-server-config.yml
+  tags: [server-config]
+
+# 9. 验证所有服务
 - name: Verify all services
   hosts: all
   become: yes
@@ -103,6 +127,14 @@
           - "  ✅ 共享网络创建"
           - "  ✅ docker-rollout 工具"
           - "  ✅ AWS 凭证配置 (ECR 访问)"
+          - "  ✅ mise 任务管理工具"
+          - "  ✅ Shell 别名和快捷命令"
+          - ""
+          - "服务器上可用的工具:"
+          - "  mise tasks          # 列出所有运维任务"
+          - "  mise run <task>     # 执行任务"
+          - "  m <task>            # 使用别名"
+          - "  ll, dc, studio      # Shell 别名"
           - ""
           - "注意："
           - "  - 所有服务目录会在首次部署时自动创建"

@@ -1,0 +1,55 @@
+---
+# Setup mise on production server
+# This playbook installs mise and configures it to use /srv/studio/mise.toml
+
+- name: Setup mise on Server
+  hosts: all
+  become: yes
+
+  vars:
+    mise_config_path: "/srv/studio/mise.toml"
+
+  tasks:
+    - name: Check if mise is already installed
+      stat:
+        path: /home/deploy/.local/bin/mise
+      become_user: deploy
+      register: mise_binary
+
+    - name: Install mise
+      shell: |
+        curl https://mise.run | sh
+      args:
+        creates: /home/deploy/.local/bin/mise
+      become_user: deploy
+      when: not mise_binary.stat.exists
+
+    - name: Ensure /srv/studio directory exists
+      file:
+        path: /srv/studio
+        state: directory
+        owner: deploy
+        group: deploy
+        mode: '0755'
+
+    - name: Configure mise in bashrc
+      blockinfile:
+        path: /home/deploy/.bashrc
+        block: |
+          # mise - polyglot tool version manager
+          eval "$(/home/deploy/.local/bin/mise activate bash)"
+          export MISE_CONFIG_FILE={{ mise_config_path }}
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - mise"
+        create: yes
+      become_user: deploy
+
+    - name: Display mise installation info
+      debug:
+        msg:
+          - "✅ mise installed and configured"
+          - "Config file: {{ mise_config_path }}"
+          - ""
+          - "Usage on server:"
+          - "  mise tasks          # List all available tasks"
+          - "  mise run <task>     # Run a task"
+          - "  mr <task>           # Use alias (after aliases are installed)"

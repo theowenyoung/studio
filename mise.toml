@@ -247,7 +247,7 @@ run = "bash external-apps/owen-blog/build.sh"
 # 基础设施部署
 [tasks.deploy-infra]
 description = "Deploy all infrastructure services"
-run = ["mise run deploy-infra-postgres", "mise run deploy-infra-redis", "mise run deploy-infra-caddy", "mise run deploy-infra-backup"]
+run = ["mise run deploy-infra-postgres", "mise run deploy-infra-redis", "mise run deploy-infra-caddy", "mise run deploy-infra-backup", "mise run deploy-infra-db-admin"]
 
 [tasks.deploy-infra-postgres]
 description = "Deploy PostgreSQL to production"
@@ -325,13 +325,16 @@ alias = "deploy-db-admin"
 description = "Run hono-demo migrations in production"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.yml -e service_name=hono-demo"
 
+
 # ==================== 服务器管理 (server-) ====================
 
-# 服务器初始化
-[tasks.server-init]
-description = "Initialize server (security, docker, directories)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml"
+# 快捷 SSH 连接
 
+[tasks.ssh]
+description = "SSH to production server and cd to /srv/studio"
+run = 'ssh -t deploy@5.78.126.18 "cd /srv/studio && exec bash -l"'
+
+# 用脚本创建初始用户
 [tasks.server-init-user]
 description = "Create deploy user on server"
 usage = '''
@@ -343,56 +346,32 @@ rsync -chazP ./scripts/create-init-user.sh ${usage_user?}@${usage_ip?}:
 ssh ${usage_user?}@${usage_ip?} 'bash create-init-user.sh'
 '''
 
+# 服务器初始化
+[tasks.server-init]
+description = "Initialize server (security, docker, directories, mise, aliases)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true"
+
+# 服务器普通更新
+[tasks.server-update]
+description = "Update server configuration (skip system update)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml"
+
+
+# 同步服务器配置
+[tasks.server-sync-config]
+description = "Sync server-mise.toml and bash_aliases to server"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/sync-server-config.yml"
+alias = "sync-config"
+
 [tasks.server-configure-aws]
 description = "Configure AWS credentials on server (for ECR access)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml"
 
-# 备份相关
+# 备份与恢复（通过 Ansible 触发）
 [tasks.server-backup]
 description = "Run backup on production server"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/run-backup.yml"
 alias = "backup"
-
-[tasks.server-backup-list]
-description = "List local backups"
-run = 'docker compose run --rm backup /usr/local/bin/list-backups.sh'
-dir = "infra-apps/backup"
-
-[tasks.server-backup-list-prod]
-description = "List production S3 backups"
-run = 'docker compose run --rm -e ENVIRONMENT=prod backup /usr/local/bin/list-s3-postgres.sh'
-dir = "infra-apps/backup"
-
-# 恢复相关
-[tasks.server-restore-postgres-latest]
-description = "Restore from latest local backup"
-run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-local.sh latest'
-dir = "infra-apps/backup"
-
-[tasks.server-restore-postgres-file]
-description = "Restore from specific local backup file"
-run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-local.sh'
-dir = "infra-apps/backup"
-
-[tasks.server-restore-s3-list]
-description = "List S3 backups (dev)"
-run = 'docker compose run --rm backup /usr/local/bin/list-s3-postgres.sh'
-dir = "infra-apps/backup"
-
-[tasks.server-restore-s3-list-prod]
-description = "List S3 backups (production)"
-run = 'docker compose run --rm -e ENVIRONMENT=prod backup /usr/local/bin/list-s3-postgres.sh'
-dir = "infra-apps/backup"
-
-[tasks.server-restore-s3-latest]
-description = "Restore from latest S3 backup"
-run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh latest'
-dir = "infra-apps/backup"
-
-[tasks.server-restore-s3-file]
-description = "Restore from specific S3 backup"
-run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh'
-dir = "infra-apps/backup"
 
 # Volume 管理
 [tasks.server-resize-volume]
@@ -400,23 +379,9 @@ description = "Resize Hetzner volume (expand filesystem)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml"
 alias = "resize"
 
-# 清理相关
-[tasks.server-clean-postgres-soft]
-description = "Soft clean PostgreSQL (keep data)"
-run = 'docker compose run --rm backup /usr/local/bin/clean-postgres.sh'
-dir = "infra-apps/backup"
-
-[tasks.server-clean-postgres-hard]
-description = "Hard clean PostgreSQL (remove all data)"
-run = 'docker compose down -v'
-dir = "infra-apps/postgres"
-
-[tasks.server-clean-s3-smart]
-description = "Smart clean backups (local + S3 with 3-2-1 retention)"
-run = 'docker compose run --rm backup /usr/local/bin/cleanup-smart.sh'
-dir = "infra-apps/backup"
-
-# 回滚相关 - 已移除，请在 CI 中重新部署旧版本即可
+# Note: 其他服务器运维任务（查看日志、恢复数据库、查看备份等）
+# 请 SSH 到服务器后使用 server-mise.toml 中定义的任务
+# 例如：mise ssh-studio 然后 mise run db-restore-local
 
 # ==================== 通用工具 (无前缀) ====================
 

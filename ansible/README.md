@@ -139,6 +139,43 @@ ansible all -i inventory.yml -m ping
 ansible all -i inventory.yml -m setup
 ```
 
+## 🐛 故障排查
+
+### Mount 问题
+
+如果遇到 `/data` 挂载失败（例如 "Can't open blockdev" 错误），请参考：
+
+📖 **[MOUNT_TROUBLESHOOTING.md](./MOUNT_TROUBLESHOOTING.md)** - 详细的 mount 问题排查指南
+
+**快速修复**:
+
+```bash
+# 1. 检查磁盘状态
+ansible -i inventory.yml all -m shell -a "bash -s" < scripts/check-disk.sh
+
+# 2. 运行自动修复
+ansible-playbook -i inventory.yml playbooks/fix-mount.yml
+
+# 3. 手动指定设备（如果自动检测失败）
+ansible-playbook -i inventory.yml playbooks/fix-mount.yml -e "data_disk=/dev/sdb1"
+```
+
+常见问题：
+- ❌ 尝试挂载整个磁盘 `/dev/sdb` → ✅ 应该挂载分区 `/dev/sdb1`
+- ❌ 设备已经挂载在其他位置 → ✅ 先卸载再重新挂载
+- ❌ fstab 有冲突条目 → ✅ 清理旧条目
+
+### 性能优化
+
+如果服务器初始化太慢，请参考：
+
+📖 **[PERFORMANCE_OPTIMIZATION.md](./PERFORMANCE_OPTIMIZATION.md)** - 性能优化指南
+
+**快速优化**:
+- 跳过系统更新（默认已启用，可节省 2-10 分钟）
+- 使用 tags 只运行必要的步骤
+- 启用 SSH 连接复用（已在 ansible.cfg 中配置）
+
 ## 📝 自定义配置
 
 可以通过变量自定义行为：

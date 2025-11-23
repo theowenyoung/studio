@@ -3,7 +3,7 @@
 - name: Security Hardening
   hosts: all
   become: yes
-  gather_facts: yes
+  gather_facts: no  # 使用缓存的 facts
 
   pre_tasks:
     # 安装 fail2ban 依赖包
