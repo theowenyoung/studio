@@ -5,6 +5,7 @@ bun = "latest"
 node = "latest"
 rust = "latest"
 "cargo:psenv" = "latest"
+"zola" = "latest"
 
 [env]
 # AWS ECR registry
@@ -237,6 +238,10 @@ run = "bash js-apps/storefront/build.sh"
 description = "Build meilisearch"
 run = "bash external-apps/meilisearch/build.sh"
 
+[tasks.build-owen-blog]
+description = "Build owen-blog"
+run = "bash external-apps/owen-blog/build.sh"
+
 # ==================== 部署 (deploy-) ====================
 
 # 基础设施部署
@@ -261,6 +266,11 @@ description = "Deploy Caddy to production"
 depends = ["build-infra-caddy"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy.yml"
 alias = "deploy-caddy"
+
+[tasks.deploy-infra-caddy-reload]
+description = "Quick reload Caddy config (no build, only sync & reload)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy-reload.yml"
+alias = "reload-caddy"
 
 [tasks.deploy-infra-backup]
 description = "Deploy backup service to production"
@@ -294,6 +304,11 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.ym
 description = "Deploy meilisearch to production"
 depends = ["build-meilisearch"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-external-app.yml -e service_name=meilisearch"
+
+[tasks.deploy-owen-blog]
+description = "Deploy owen-blog to production"
+depends = ["build-owen-blog"]
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-external-app.yml -e service_name=owen-blog"
 
 # 数据库迁移部署
 [tasks.deploy-infra-db-admin]

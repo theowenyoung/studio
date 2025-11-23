@@ -1,0 +1,45 @@
+---
+- name: Reload Caddy Configuration (Fast)
+  hosts: all
+  become: yes
+  become_user: deploy
+  gather_facts: no
+
+  vars:
+    service_name: "caddy"
+    local_config: "{{ playbook_dir }}/../../infra-apps/caddy/src/config"
+    remote_dir: "/srv/studio/infra-apps/caddy"
+
+  tasks:
+    - debug:
+        msg: "🔄 Reloading Caddy configuration..."
+
+    # ===== Sync only config directory =====
+    - name: Sync config directory to server
+      synchronize:
+        src: "{{ local_config }}/"
+        dest: "{{ remote_dir }}/config/"
+        delete: no
+
+    # ===== Reload Caddy =====
+    - name: Reload Caddy configuration
+      shell: |
+        cd {{ remote_dir }}
+        docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+      register: reload_result
+      failed_when: false
+
+    - name: Display reload output
+      debug:
+        msg: "{{ reload_result.stdout_lines }}"
+      when: reload_result.stdout_lines is defined
+
+    - name: Check reload status
+      fail:
+        msg: "❌ Caddy reload failed! Error: {{ reload_result.stderr }}"
+      when: reload_result.rc != 0
+
+    - name: Display success message
+      debug:
+        msg: "✅ Caddy configuration reloaded successfully"
+      when: reload_result.rc == 0
