@@ -1,29 +1,32 @@
-name: Deploy Infrastructure
+name: Deploy External Applications
 
 on:
+  # 手动触发
   workflow_dispatch:
     inputs:
       service:
-        description: 'Infrastructure service to deploy'
+        description: 'External app to deploy'
         required: true
         type: choice
         options:
-          - 'postgres'
-          - 'redis'
-          - 'caddy'
-          - 'backup'
+          - 'meilisearch'
+          - 'owen-blog'
           - 'all'
+
+  # Webhook 触发（例如：博客仓库更新后触发）
+  repository_dispatch:
+    types: [deploy-external-app]
 
 env:
   ECR_REGISTRY: 912951144733.dkr.ecr.us-west-2.amazonaws.com
 
 jobs:
-  deploy-infra:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # 缓存 mise
+      # 缓存 mise 工具
       - name: Cache mise
         uses: actions/cache@v4
         with:
@@ -83,24 +86,64 @@ jobs:
         run: |
           ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      # 部署基础设施（使用 repo 中的 inventory.yml + 环境变量指定 SSH key）
-      - name: Deploy infrastructure
+      # 确定要部署的服务
+      - name: Determine deployment target
+        id: target
         run: |
-          if [ "${{ inputs.service }}" = "all" ]; then
-            mise run deploy-infra
+          # workflow_dispatch 触发
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SERVICE="${{ inputs.service }}"
+          # repository_dispatch 触发（从 webhook payload 读取）
+          elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            SERVICE="${{ github.event.client_payload.service }}"
+            if [ -z "$SERVICE" ]; then
+              echo "❌ Error: service not specified in webhook payload"
+              exit 1
+            fi
+          fi
+
+          echo "service=${SERVICE}" >> $GITHUB_OUTPUT
+          echo "📦 Deploying: ${SERVICE}"
+
+      # 部署服务
+      - name: Deploy ${{ steps.target.outputs.service }}
+        run: |
+          SERVICE="${{ steps.target.outputs.service }}"
+
+          if [ "$SERVICE" = "all" ]; then
+            echo "🚀 Deploying all external apps..."
+            for app in meilisearch owen-blog; do
+              echo "Deploying ${app}..."
+              mise run build-${app}
+              mise run deploy-${app}
+            done
           else
-            mise run deploy-infra-${{ inputs.service }}
+            echo "🚀 Deploying ${SERVICE}..."
+            mise run build-${SERVICE}
+            mise run deploy-${SERVICE}
           fi
         env:
+          DOCKER_BUILDKIT: 1
+          BUILDKIT_PROGRESS: plain
           ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/id_rsa
 
-      # 部署结果
+      # 部署结果通知
       - name: Deployment summary
         if: always()
         run: |
-          echo "### Infrastructure Deployment Result 🏗️" >> $GITHUB_STEP_SUMMARY
+          SERVICE="${{ steps.target.outputs.service }}"
+
+          echo "### External App Deployment Result 🌐" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- Service: \`${{ inputs.service }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Service: \`${SERVICE}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Triggered by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "- Triggered by: Webhook" >> $GITHUB_STEP_SUMMARY
+            echo "- Source repo: ${{ github.event.client_payload.repository || 'N/A' }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Triggered by: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

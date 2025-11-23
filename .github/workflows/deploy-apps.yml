@@ -208,25 +208,14 @@ jobs:
         run: |
           ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      # 配置 Ansible inventory（从环境变量）
-      - name: Setup Ansible inventory
-        run: |
-          cat > ansible/inventory.yml << EOF
-          all:
-            hosts:
-              production:
-                ansible_host: ${{ env.DEPLOY_HOST }}
-                ansible_user: ${{ env.DEPLOY_USER }}
-                ansible_ssh_private_key_file: ~/.ssh/id_rsa
-          EOF
-
-      # 部署服务（直接调用 mise）
+      # 部署服务（使用 repo 中的 inventory.yml + 环境变量指定 SSH key）
       - name: Deploy ${{ matrix.service }}
         run: |
-          mise run deploy-app-${{ matrix.service }}
+          mise run deploy-${{ matrix.service }}
         env:
           DOCKER_BUILDKIT: 1
           BUILDKIT_PROGRESS: plain
+          ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/id_rsa
 
       # 部署结果通知（可选）
       - name: Deployment summary
