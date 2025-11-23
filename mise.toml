@@ -408,8 +408,8 @@ run = 'docker compose down -v'
 dir = "infra-apps/postgres"
 
 [tasks.server-clean-s3-smart]
-description = "Smart clean S3 backups (3-2-1 retention)"
-run = 'docker compose run --rm backup /usr/local/bin/cleanup-s3-smart.sh'
+description = "Smart clean backups (local + S3 with 3-2-1 retention)"
+run = 'docker compose run --rm backup /usr/local/bin/cleanup-smart.sh'
 dir = "infra-apps/backup"
 
 # 回滚相关 - 已移除，请在 CI 中重新部署旧版本即可

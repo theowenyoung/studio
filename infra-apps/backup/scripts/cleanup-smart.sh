@@ -1,12 +1,42 @@
 #!/bin/bash
 set -e
 
-echo "[$(date)] Starting smart S3 cleanup (3-2-1 strategy)"
+echo "[$(date)] Starting smart cleanup (local + S3)"
 echo ""
+
+# ===== 1. 清理本地备份 =====
+BACKUP_RETENTION_LOCAL=${BACKUP_RETENTION_LOCAL:-3}
+
+echo "==========================================="
+echo "Cleaning LOCAL backups"
+echo "==========================================="
+echo "Retention: Keep last ${BACKUP_RETENTION_LOCAL} days"
+echo ""
+
+# 清理 Postgres 本地备份
+if [ -d "/backups/postgres" ]; then
+    DELETED_POSTGRES=$(find /backups/postgres -name "*.sql.gz" -mtime +${BACKUP_RETENTION_LOCAL} -delete -print | wc -l)
+    echo "✅ Deleted ${DELETED_POSTGRES} old Postgres backup(s)"
+fi
+
+# 清理 Redis 本地备份
+if [ -d "/backups/redis" ]; then
+    DELETED_REDIS=$(find /backups/redis -name "*.rdb" -mtime +${BACKUP_RETENTION_LOCAL} -delete -print | wc -l)
+    echo "✅ Deleted ${DELETED_REDIS} old Redis backup(s)"
+fi
+
+echo ""
+
+# ===== 2. 清理 S3 备份（智能策略）=====
+echo "==========================================="
+echo "Cleaning S3 backups (3-2-1 strategy)"
+echo "==========================================="
 
 # 检查 S3 配置
 if [ -z "$S3_BUCKET" ] || [ -z "$AWS_ACCESS_KEY_ID" ]; then
-    echo "[$(date)] S3 cleanup skipped (S3_BUCKET or AWS credentials not set)"
+    echo "⚠️  S3 cleanup skipped (S3_BUCKET or AWS credentials not set)"
+    echo ""
+    echo "[$(date)] Cleanup completed (local only)"
     exit 0
 fi
 
@@ -39,7 +69,8 @@ cleanup_database() {
         grep "PRE" | awk '{print $2}' | sed 's/\///' | grep '^[0-9]' || true)
 
     if [ -z "$DATES" ]; then
-        echo "No backups found for ${DB_TYPE}"
+        echo "ℹ️  No backups found for ${DB_TYPE}"
+        echo ""
         return
     fi
 
@@ -89,6 +120,6 @@ cleanup_database "postgres"
 # 清理 Redis 备份
 cleanup_database "redis"
 
-echo "=========================================="
-echo "[$(date)] Smart S3 cleanup completed!"
-echo "=========================================="
+echo "==========================================="
+echo "[$(date)] Smart cleanup completed!"
+echo "==========================================="

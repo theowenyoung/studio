@@ -27,8 +27,8 @@ ${POSTGRES_SCHEDULE} /usr/local/bin/backup-postgres.sh >> /var/log/backup.log 2>
 # Redis 备份 (默认每天凌晨3点)
 ${REDIS_SCHEDULE} /usr/local/bin/backup-redis.sh >> /var/log/backup.log 2>&1
 
-# 清理旧备份 (默认每天凌晨5点)
-${CLEANUP_SCHEDULE} /usr/local/bin/cleanup.sh >> /var/log/backup.log 2>&1
+# 清理旧备份 (默认每天凌晨5点) - 使用智能清理策略
+${CLEANUP_SCHEDULE} /usr/local/bin/cleanup-smart.sh >> /var/log/backup.log 2>&1
 
 # 完整备份 (默认每周日凌晨4点)
 ${FULL_BACKUP_SCHEDULE} /usr/local/bin/backup-all.sh >> /var/log/backup.log 2>&1

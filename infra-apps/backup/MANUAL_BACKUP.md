@@ -22,7 +22,7 @@ docker compose exec backup /usr/local/bin/backup-postgres.sh
 docker compose exec backup /usr/local/bin/backup-redis.sh
 
 # 清理旧备份
-docker compose exec backup /usr/local/bin/cleanup.sh
+docker compose exec backup /usr/local/bin/cleanup-smart.sh
 ```
 
 ### 方式 2: 创建临时容器执行
@@ -56,46 +56,43 @@ ls -lt ./.local/backups/redis/ | head -5
 
 ## 生产环境
 
-### 前提条件
-确保备份服务已启动：
+### 方式 1: 从本地触发（推荐）
+
+使用 Ansible 从本地触发生产环境备份，无需 SSH：
+
 ```bash
-cd infra-apps/backup
-docker compose -f docker-compose.prod.yml ps backup
+# 使用 mise 快捷命令
+mise run backup
+
+# 或直接使用 ansible-playbook
+ansible-playbook -i ansible/inventory.yml ansible/playbooks/run-backup.yml
 ```
 
-### 方式 1: 在运行的容器中执行（推荐）
+### 方式 2: 在服务器上执行
+
+SSH 到生产服务器后：
 
 ```bash
-# 备份所有服务
-docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/backup-all.sh
+# 进入备份目录
+cd /srv/studio/infra-apps/backup
 
-# 只备份 PostgreSQL
-docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/backup-postgres.sh
+# 确保服务已启动
+docker compose ps backup
 
-# 只备份 Redis
-docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/backup-redis.sh
+# 在运行的容器中执行（推荐）
+docker compose exec backup /usr/local/bin/backup-all.sh
+docker compose exec backup /usr/local/bin/backup-postgres.sh
+docker compose exec backup /usr/local/bin/backup-redis.sh
 
-# 清理旧备份
-docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/cleanup.sh
-```
-
-### 方式 2: 创建临时容器执行
-
-```bash
-# 备份所有服务
-docker compose -f docker-compose.prod.yml run --rm backup /usr/local/bin/backup-all.sh
-
-# 只备份 PostgreSQL
-docker compose -f docker-compose.prod.yml run --rm backup /usr/local/bin/backup-postgres.sh
+# 或创建临时容器执行
+docker compose run --rm backup /usr/local/bin/backup-all.sh
 ```
 
 ### 查看备份结果
 
 ```bash
-# 查看 PostgreSQL 备份
+# 查看备份文件（在服务器上）
 ls -lh /data/backups/postgres/
-
-# 查看 Redis 备份
 ls -lh /data/backups/redis/
 
 # 查看最新的备份
@@ -104,30 +101,6 @@ ls -lt /data/backups/redis/ | head -5
 
 # 查看备份文件大小统计
 du -sh /data/backups/*
-```
-
-## 在服务器上执行（SSH）
-
-### 通过 SSH 连接到服务器后
-
-```bash
-# 进入项目目录
-cd /path/to/project/infra-apps/backup
-
-# 执行备份
-docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/backup-all.sh
-
-# 或者使用别名（如果已配置）
-docker compose -f docker-compose.prod.yml exec backup backup-all.sh
-```
-
-### 远程执行（一行命令）
-
-```bash
-# 通过 SSH 直接执行备份
-ssh user@server "cd /path/to/project/infra-apps/backup && docker compose -f docker-compose.prod.yml exec -T backup /usr/local/bin/backup-all.sh"
-
-# 注意：使用 -T 参数禁用伪终端分配
 ```
 
 ## 快捷脚本
@@ -155,7 +128,7 @@ case "$1" in
     docker compose exec backup /usr/local/bin/backup-redis.sh
     ;;
   cleanup)
-    docker compose exec backup /usr/local/bin/cleanup.sh
+    docker compose exec backup /usr/local/bin/cleanup-smart.sh
     ;;
   test)
     docker compose exec backup /usr/local/bin/test-connection.sh
@@ -204,64 +177,48 @@ chmod +x backup.sh
 ./backup.sh list
 ```
 
-### 生产环境快捷脚本
+### 生产环境操作
 
-创建 `infra-apps/backup/backup-prod.sh`:
+#### 从本地触发（推荐）
+
+使用 Ansible 从本地触发生产环境备份：
 
 ```bash
-#!/bin/bash
-set -e
+# 触发完整备份
+mise run backup
 
-cd "$(dirname "$0")"
+# 或直接使用 ansible-playbook
+ansible-playbook -i ansible/inventory.yml ansible/playbooks/run-backup.yml
+```
 
-case "$1" in
-  all)
-    docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/backup-all.sh
-    ;;
-  postgres)
-    docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/backup-postgres.sh
-    ;;
-  redis)
-    docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/backup-redis.sh
-    ;;
-  cleanup)
-    docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/cleanup.sh
-    ;;
-  test)
-    docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/test-connection.sh
-    ;;
-  logs)
-    docker compose -f docker-compose.prod.yml exec backup tail -f /var/log/backup.log
-    ;;
-  list)
-    echo "PostgreSQL backups:"
-    ls -lh /data/backups/postgres/
-    echo ""
-    echo "Redis backups:"
-    ls -lh /data/backups/redis/
-    ;;
-  stats)
-    echo "Backup storage statistics:"
-    du -sh /data/backups/*
-    echo ""
-    echo "Disk usage:"
-    df -h /data/backups
-    ;;
-  *)
-    echo "Usage: $0 {all|postgres|redis|cleanup|test|logs|list|stats}"
-    echo ""
-    echo "Commands:"
-    echo "  all      - Backup all services (PostgreSQL + Redis)"
-    echo "  postgres - Backup PostgreSQL only"
-    echo "  redis    - Backup Redis only"
-    echo "  cleanup  - Clean up old backups"
-    echo "  test     - Test database connections"
-    echo "  logs     - View backup logs"
-    echo "  list     - List backup files"
-    echo "  stats    - Show storage statistics"
-    exit 1
-    ;;
-esac
+#### 直接在服务器上操作
+
+SSH 到生产服务器后：
+
+```bash
+cd /srv/studio/infra-apps/backup
+
+# 完整备份
+docker compose run --rm backup /usr/local/bin/backup-all.sh
+
+# PostgreSQL 备份
+docker compose run --rm backup /usr/local/bin/backup-postgres.sh
+
+# Redis 备份
+docker compose run --rm backup /usr/local/bin/backup-redis.sh
+
+# 智能清理
+docker compose run --rm backup /usr/local/bin/cleanup-smart.sh
+
+# 测试连接
+docker compose run --rm backup /usr/local/bin/test-connection.sh
+
+# 查看日志
+docker compose exec backup tail -f /var/log/backup.log
+
+# 列出备份文件
+ls -lh /data/backups/postgres/
+ls -lh /data/backups/redis/
 ```
 
 ## 查看备份日志
@@ -269,31 +226,34 @@ esac
 ### 实时查看日志
 
 ```bash
-# 开发环境
+# 本地开发环境
 docker compose exec backup tail -f /var/log/backup.log
 
-# 生产环境
-docker compose -f docker-compose.prod.yml exec backup tail -f /var/log/backup.log
+# 生产服务器上（SSH 后）
+cd /srv/studio/infra-apps/backup
+docker compose exec backup tail -f /var/log/backup.log
 ```
 
 ### 查看最近的日志
 
 ```bash
-# 开发环境
+# 本地开发环境
 docker compose exec backup tail -100 /var/log/backup.log
 
-# 生产环境
-docker compose -f docker-compose.prod.yml exec backup tail -100 /var/log/backup.log
+# 生产服务器上（SSH 后）
+cd /srv/studio/infra-apps/backup
+docker compose exec backup tail -100 /var/log/backup.log
 ```
 
 ### 搜索日志中的错误
 
 ```bash
-# 开发环境
+# 本地开发环境
 docker compose exec backup grep -i error /var/log/backup.log
 
-# 生产环境
-docker compose -f docker-compose.prod.yml exec backup grep -i error /var/log/backup.log
+# 生产服务器上（SSH 后）
+cd /srv/studio/infra-apps/backup
+docker compose exec backup grep -i error /var/log/backup.log
 ```
 
 ## 测试连接
@@ -301,11 +261,12 @@ docker compose -f docker-compose.prod.yml exec backup grep -i error /var/log/bac
 在执行备份前，建议先测试数据库连接：
 
 ```bash
-# 开发环境
+# 本地开发环境
 docker compose exec backup /usr/local/bin/test-connection.sh
 
-# 生产环境
-docker compose -f docker-compose.prod.yml exec backup /usr/local/bin/test-connection.sh
+# 生产服务器上（SSH 后）
+cd /srv/studio/infra-apps/backup
+docker compose exec backup /usr/local/bin/test-connection.sh
 ```
 
 ## 常见场景
@@ -387,7 +348,7 @@ df -h
 du -sh /data/backups/*
 
 # 3. 手动清理旧备份
-docker compose exec backup /usr/local/bin/cleanup.sh
+docker compose exec backup /usr/local/bin/cleanup-smart.sh
 
 # 4. 查看清理后的结果
 ls -lh /data/backups/postgres/

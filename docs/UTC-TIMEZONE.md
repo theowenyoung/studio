@@ -76,7 +76,7 @@ TEMP_FILE="/tmp/restore-$(date -u +%s).sql.gz"
 
 ### 3. 清理系统
 
-#### 3.1 cleanup-s3-smart.sh
+#### 3.1 cleanup-smart.sh
 
 **修改**:
 ```bash
@@ -137,7 +137,7 @@ mise run restore-postgres-s3-list
 
 ```bash
 # 在不同时区测试清理脚本
-TZ=Asia/Tokyo docker compose -f infra-apps/backup/docker-compose.yml run --rm backup /usr/local/bin/cleanup-s3-smart.sh
+TZ=Asia/Tokyo docker compose -f infra-apps/backup/docker-compose.yml run --rm backup /usr/local/bin/cleanup-smart.sh
 
 # 清理决策应该一致
 ```

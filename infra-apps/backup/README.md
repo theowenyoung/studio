@@ -31,7 +31,9 @@ backup/
 │   ├── backup-postgres.sh    # PostgreSQL 备份脚本
 │   ├── backup-redis.sh       # Redis 备份脚本
 │   ├── backup-all.sh         # 完整备份脚本
-│   └── cleanup.sh            # 清理脚本
+│   ├── cleanup-smart.sh      # 智能清理脚本 (本地 + S3)
+│   ├── restore-postgres-local.sh  # 本地恢复脚本
+│   └── restore-postgres-s3.sh     # S3 恢复脚本
 └── .local/
     └── backups/              # 本地备份存储目录（开发环境）
         ├── postgres/
@@ -208,7 +210,7 @@ docker compose exec backup /usr/local/bin/backup-all.sh
 ### 手动清理旧备份
 
 ```bash
-docker compose exec backup /usr/local/bin/cleanup.sh
+docker compose exec backup /usr/local/bin/cleanup-smart.sh
 ```
 
 ## 备份文件格式
@@ -426,7 +428,7 @@ docker compose ps
 docker compose exec backup df -h /backups
 
 # 手动清理旧备份
-docker compose exec backup /usr/local/bin/cleanup.sh
+docker compose exec backup /usr/local/bin/cleanup-smart.sh
 
 # 或者调整保留策略（修改 docker-compose.yml）
 ```

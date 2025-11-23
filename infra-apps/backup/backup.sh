@@ -19,8 +19,8 @@ case "$1" in
     docker compose run --rm backup /usr/local/bin/backup-redis.sh
     ;;
   cleanup)
-    echo "🧹 Cleaning up old backups..."
-    docker compose run --rm backup /usr/local/bin/cleanup.sh
+    echo "🧹 Cleaning up old backups with smart strategy..."
+    docker compose run --rm backup /usr/local/bin/cleanup-smart.sh
     ;;
   test)
     echo "🔍 Testing database connections..."
