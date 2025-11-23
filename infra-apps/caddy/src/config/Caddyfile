@@ -2,11 +2,14 @@
     # 全局配置
     email owen@owenyoung.com
 
-    # 日志输出到 stdout，由 Docker logging driver 管理
+    # DEBUG: 详细日志用于性能调试
+    # TODO: 调试完成后改回 INFO 级别和简单格式
     log {
         level INFO
         output stdout
-        format json
+        format json {
+            time_format "iso8601"
+        }
     }
 
     # 性能优化
@@ -28,6 +31,19 @@
 }
 
 # ==================== Snippets ====================
+
+# ==================== Observability ====================
+# 生产环境的可观测性配置 - 保留用于持续监控
+(observability) {
+    # 访问日志（JSON 格式，便于日志系统解析）
+    log {
+        output stdout
+        format json {
+            time_format "iso8601"
+        }
+    }
+}
+# ==================== END Observability ====================
 
 (common_cache) {
     # 启用压缩（统一在 Caddy 层处理）
@@ -68,7 +84,14 @@
 # ==================== SSG Sites (nginx containers) ====================
 
 owen-blog-demo.owenyoung.com {
+    # TLS 优化 - 启用 TLS 1.3 和 session resumption
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
     import ssg_cache
+    import observability
+
     reverse_proxy owen-blog:3000
 }
 
@@ -80,13 +103,21 @@ remove-cf-for-aigateway.owenyoung.com {
 }
 # Blog
 blog-demo.owenyoung.com {
+    tls {
+        protocols tls1.2 tls1.3
+    }
     import ssg_cache
+    import observability
     reverse_proxy blog:3000
 }
 
 # Storefront
 storefront-demo.owenyoung.com {
+    tls {
+        protocols tls1.2 tls1.3
+    }
     import ssg_cache
+    import observability
     reverse_proxy storefront:3000
 }
 
