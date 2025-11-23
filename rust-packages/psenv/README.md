@@ -34,9 +34,9 @@ psenv --template .env.example --prefix "/studio-dev/" --output .env
 ### Optional Arguments
 
 - `--output` / `-o`: Output file (default: `.env`)
-- `--strategy` / `-s`: Processing strategy (default: `update`)
-  - `update`: Update existing values and add new ones while preserving file format
+- `--strategy` / `-s`: Processing strategy (default: `overwrite`)
   - `overwrite`: Completely overwrite the file with only the fetched values
+  - `update`: Update existing values and add new ones while preserving file format
   - `error`: Error if output file exists
 - `--ignore-keys` / `-i`: Skip these keys (comma-separated, e.g., `DB_HOST,DEBUG`)
 - `--require-all`: All keys must exist in Parameter Store, otherwise error (default: true)

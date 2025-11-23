@@ -1,6 +1,6 @@
 services:
   backup:
-    image: backup:latest  # 生产环境使用已构建的镜像
+    image: ${IMAGE_TAG}
     restart: unless-stopped
     env_file:
       - .env  # 从 .env 加载敏感信息：POSTGRES_ADMIN_URL, REDIS_DOCKER_URL, S3 凭证等

@@ -346,8 +346,8 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws
 # 备份相关
 [tasks.server-backup]
 description = "Run backup on production server"
-run = 'docker compose run --rm backup /usr/local/bin/backup-all.sh'
-dir = "infra-apps/backup"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/run-backup.yml"
+alias = "backup"
 
 [tasks.server-backup-list]
 description = "List local backups"
@@ -389,6 +389,12 @@ dir = "infra-apps/backup"
 description = "Restore from specific S3 backup"
 run = 'docker compose run --rm backup /usr/local/bin/restore-postgres-s3.sh'
 dir = "infra-apps/backup"
+
+# Volume 管理
+[tasks.server-resize-volume]
+description = "Resize Hetzner volume (expand filesystem)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml"
+alias = "resize"
 
 # 清理相关
 [tasks.server-clean-postgres-soft]

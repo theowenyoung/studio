@@ -23,12 +23,13 @@
     - name: Get device path from label
       shell: blkid -L docker-data
       register: device_path
-      when: mounted_device.stdout.startswith('LABEL=')
+      when: mounted_device.stdout is match('^LABEL=')
       changed_when: false
+      failed_when: false
 
     - name: Set actual device path
       set_fact:
-        actual_device: "{{ device_path.stdout if mounted_device.stdout.startswith('LABEL=') else mounted_device.stdout }}"
+        actual_device: "{{ device_path.stdout if (mounted_device.stdout is match('^LABEL=') and device_path.stdout is defined) else mounted_device.stdout }}"
 
     - name: Show device being resized
       debug:
@@ -44,6 +45,11 @@
       register: rescan_result
       changed_when: false
 
+    - name: Detect filesystem type
+      shell: blkid -o value -s TYPE "{{ actual_device }}"
+      register: fs_type
+      changed_when: false
+
     - name: Get device size before resize
       shell: blockdev --getsize64 "{{ actual_device }}"
       register: device_size_before
@@ -51,8 +57,19 @@
 
     - name: Resize ext4 filesystem
       command: resize2fs "{{ actual_device }}"
-      register: resize_result
-      failed_when: resize_result.rc != 0 and "Nothing to do" not in resize_result.stderr
+      register: resize_result_ext
+      when: fs_type.stdout in ['ext2', 'ext3', 'ext4']
+      failed_when: resize_result_ext.rc != 0 and "Nothing to do" not in resize_result_ext.stderr
+
+    - name: Resize XFS filesystem
+      command: xfs_growfs "{{ data_mount_point }}"
+      register: resize_result_xfs
+      when: fs_type.stdout == 'xfs'
+      failed_when: resize_result_xfs.rc != 0
+
+    - name: Set resize result
+      set_fact:
+        resize_result: "{{ resize_result_ext if fs_type.stdout in ['ext2', 'ext3', 'ext4'] else resize_result_xfs }}"
 
     - name: Get device size after resize
       shell: blockdev --getsize64 "{{ actual_device }}"
@@ -67,6 +84,7 @@
     - name: Show resize results
       debug:
         msg: |
+          Filesystem type: {{ fs_type.stdout }}
           {% if resize_result.rc == 0 and "Nothing to do" not in resize_result.stderr %}
           ✅ SUCCESS: Filesystem resized successfully!
           {% elif "Nothing to do" in resize_result.stderr %}
@@ -81,16 +99,21 @@
           Device size changed: {{ (device_size_before.stdout | int) != (device_size_after.stdout | int) }}
           Resize output: {{ resize_result.stdout | default('No output') }}
 
-    - name: Verify filesystem integrity after resize
+    - name: Verify filesystem integrity after resize (ext4 only)
       command: fsck -n "{{ actual_device }}"
       register: fsck_result
+      when: fs_type.stdout in ['ext2', 'ext3', 'ext4']
       failed_when: false
       changed_when: false
 
     - name: Show filesystem check results
       debug:
         msg: |
+          {% if fs_type.stdout in ['ext2', 'ext3', 'ext4'] %}
           Filesystem integrity check: {% if fsck_result.rc == 0 %}✅ PASSED{% else %}⚠️  WARNINGS{% endif %}
           {% if fsck_result.rc != 0 %}
           Check output: {{ fsck_result.stdout }}
+          {% endif %}
+          {% else %}
+          Filesystem integrity check: ⏭️  SKIPPED ({{ fs_type.stdout }} filesystem)
           {% endif %}
