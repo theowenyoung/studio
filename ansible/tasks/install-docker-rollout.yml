@@ -16,14 +16,28 @@
         dest: /tmp/docker-rollout
         mode: '0755'
 
-    - name: Install docker-rollout to /usr/local/bin
+    - name: Create Docker CLI plugins directory
+      file:
+        path: /usr/local/lib/docker/cli-plugins
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Install docker-rollout as Docker CLI plugin
       copy:
         src: /tmp/docker-rollout
-        dest: /usr/local/bin/docker-rollout
+        dest: /usr/local/lib/docker/cli-plugins/docker-rollout
         remote_src: yes
         mode: '0755'
         owner: root
         group: root
+
+    - name: Create symlink in /usr/local/bin for direct access
+      file:
+        src: /usr/local/lib/docker/cli-plugins/docker-rollout
+        dest: /usr/local/bin/docker-rollout
+        state: link
 
     - name: Remove temporary file
       file:

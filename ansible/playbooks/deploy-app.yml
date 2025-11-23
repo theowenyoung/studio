@@ -72,25 +72,26 @@
         - migrate_result.rc is defined
         - migrate_result.rc != 0
 
-    # ===== Deploy service =====
-    - name: Docker compose up with remove-orphans
+    # ===== Deploy service with zero downtime =====
+    - name: Zero-downtime deployment using docker-rollout
       shell: |
         cd {{ remote_dir }}
-        docker compose up -d --remove-orphans
+        docker rollout {{ service_name }} -t 90
       register: deploy_result
+      failed_when: false
 
-    - debug:
-        msg: "{{ deploy_result.stdout_lines }}"
+    - name: Display rollout output
+      debug:
+        msg: "{{ deploy_result.stdout_lines | default([]) }}"
+      when: deploy_result.stdout_lines is defined and deploy_result.stdout_lines | length > 0
 
-    # ===== Health check =====
-    - name: Wait for container to be healthy
+    # ===== Verify deployment =====
+    - name: Verify container is running after rollout
       shell: |
         cd {{ remote_dir }}
         docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
       register: container_state
-      until: container_state.stdout == "running" or container_state.stdout == "running (healthy)"
-      retries: 12
-      delay: 5
+      changed_when: false
       failed_when: false
 
     - name: Get container logs if deployment failed
@@ -98,7 +99,7 @@
         cd {{ remote_dir }}
         docker compose logs --tail=50 {{ service_name }}
       register: container_logs
-      when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
+      when: deploy_result.rc != 0 or (container_state.stdout != "running" and container_state.stdout != "running (healthy)")
 
     - name: Display container logs
       debug:
@@ -107,10 +108,10 @@
 
     - name: Fail if deployment unsuccessful
       fail:
-        msg: "❌ Deployment of {{ service_name }} failed! Check logs above."
-      when: container_state.stdout != "running" and container_state.stdout != "running (healthy)"
+        msg: "❌ Zero-downtime deployment of {{ service_name }} failed! Check logs above."
+      when: deploy_result.rc != 0 or (container_state.stdout != "running" and container_state.stdout != "running (healthy)")
 
     - name: Display success message
       debug:
-        msg: "✅ Successfully deployed {{ service_name }}"
-      when: container_state.stdout == "running" or container_state.stdout == "running (healthy)"
+        msg: "✅ Successfully deployed {{ service_name }} with zero downtime using docker-rollout"
+      when: deploy_result.rc == 0 and (container_state.stdout == "running" or container_state.stdout == "running (healthy)")
