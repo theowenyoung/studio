@@ -130,6 +130,13 @@ mise run deploy-infra
 mise run deploy-postgres
 mise run deploy-redis
 mise run deploy-caddy
+mise run deploy-backup
+```
+
+#### 3. 创建数据库和数据库用户
+
+```
+mise run deploy-infra-db-admin
 ```
 
 #### 3. 部署应用
@@ -137,6 +144,9 @@ mise run deploy-caddy
 ```bash
 # 后端应用（Docker 容器 + 零停机）
 mise run deploy-hono
+
+# 外部应用（Docker 容器 + 零停机）
+mise run deploy-owen-blog
 
 # SSG 应用（静态文件）
 mise run deploy-storefront

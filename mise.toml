@@ -278,6 +278,10 @@ depends = ["build-infra-backup"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-backup.yml"
 
 # JS 应用部署
+[tasks.deploy-apps]
+description = "Deploy all applications"
+run = ["mise run deploy-hono-demo", "mise run deploy-proxy", "mise run deploy-blog", "mise run deploy-storefront", "mise run deploy-meilisearch", "mise run deploy-owen-blog"]
+
 [tasks.deploy-hono-demo]
 description = "Deploy hono-demo to production"
 depends = ["build-hono-demo"]
