@@ -28,6 +28,30 @@ run = "cd /srv/studio/infra-apps/backup && docker compose run --rm backup /usr/l
 description = "Create backup now"
 run = "cd /srv/studio/infra-apps/backup && docker compose run --rm backup /usr/local/bin/backup-postgres.sh"
 
+[tasks.db-clean-all]
+description = "⚠️  DANGER: Delete ALL PostgreSQL data (stops container & removes volumes)"
+run = """
+echo "⚠️  WARNING: This will DELETE ALL PostgreSQL data!"
+echo "This includes:"
+echo "  - All databases"
+echo "  - All users"
+echo "  - All configurations"
+echo ""
+read -p "Type 'DELETE ALL DATA' to confirm: " confirm
+if [ "$confirm" != "DELETE ALL DATA" ]; then
+    echo "❌ Operation cancelled"
+    exit 1
+fi
+echo ""
+echo "🛑 Stopping PostgreSQL container..."
+cd /srv/studio/infra-apps/postgres && docker compose down -v
+echo "✅ All PostgreSQL data has been deleted"
+echo ""
+echo "To reinitialize:"
+echo "  cd /srv/studio/infra-apps/postgres && docker compose up -d"
+echo "  mr db-init  # Run database initialization"
+"""
+
 # ==================== Application Management ====================
 
 [tasks.app-logs]

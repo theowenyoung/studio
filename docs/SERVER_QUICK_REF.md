@@ -42,6 +42,7 @@ mr db-restore-s3       # 从 S3 恢复
 mr db-list-local       # 查看本地备份
 mr db-backup-now       # 立即创建备份
 mr postgres-shell      # 进入 psql
+mr db-clean-all        # ⚠️ 删除所有数据（需确认）
 ```
 
 ### 系统监控

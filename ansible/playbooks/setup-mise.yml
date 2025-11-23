@@ -6,9 +6,6 @@
   hosts: all
   become: yes
 
-  vars:
-    mise_config_path: "/srv/studio/mise.toml"
-
   tasks:
     - name: Check if mise is already installed
       stat:
@@ -23,31 +20,17 @@
         creates: /home/deploy/.local/bin/mise
       become_user: deploy
       when: not mise_binary.stat.exists
-
-    - name: Ensure /srv/studio directory exists
-      file:
-        path: /srv/studio
-        state: directory
-        owner: deploy
-        group: deploy
-        mode: '0755'
-
-    - name: Configure mise in bashrc
-      blockinfile:
-        path: /home/deploy/.bashrc
-        block: |
-          # mise - polyglot tool version manager
-          eval "$(/home/deploy/.local/bin/mise activate bash)"
-          export MISE_CONFIG_FILE={{ mise_config_path }}
-        marker: "# {mark} ANSIBLE MANAGED BLOCK - mise"
-        create: yes
+    - name: Install usage CLI for mise
+      shell: /home/deploy/.local/bin/mise use -g usage
       become_user: deploy
+      tags: [mise]
+      failed_when: false
+
 
     - name: Display mise installation info
       debug:
         msg:
-          - "✅ mise installed and configured"
-          - "Config file: {{ mise_config_path }}"
+          - "✅ mise installed "
           - ""
           - "Usage on server:"
           - "  mise tasks          # List all available tasks"

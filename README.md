@@ -133,11 +133,6 @@ mise run deploy-postgres
 mise run deploy-redis
 mise run deploy-caddy
 mise run deploy-backup
-```
-
-#### 3. 创建数据库和数据库用户
-
-```
 mise run deploy-infra-db-admin
 ```
 
@@ -178,4 +173,20 @@ mise run deploy-storefront
 - 自动保留最近 3 个版本
 - 快速回滚：切换软链接到上一版本
 
+
+### 如何恢复数据库备份
+
+```
+# 连接到服务器
+mr ssh
+```
+
+```
+# 备份现有的，如果有需要
+mise run db-backup-now
+# 恢复的时候，postgres 需要是一个全新的示例，并且已经创建了响应的数据库和用户，可以在本地运行 mise run deploy-db-admin 来创建用户
+
+# 接下来 restore 最新的 s3 备份
+mise run db-restore-s3
+```
 

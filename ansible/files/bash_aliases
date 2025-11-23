@@ -30,6 +30,8 @@ alias postgres='cd /srv/studio/infra-apps/postgres'
 alias redis='cd /srv/studio/infra-apps/redis'
 alias caddy='cd /srv/studio/infra-apps/caddy'
 
+eval "$(/home/deploy/.local/bin/mise activate bash)"
+
 # ==================== mise Shortcuts ====================
 # Load mise completion and shortcuts (if mise is installed)
 if command -v mise &> /dev/null; then

@@ -89,6 +89,10 @@ mise run db-list-s3          # 查看 S3 备份
 
 # 创建备份
 mise run db-backup-now       # 立即创建备份
+
+# ⚠️ 清除所有数据（危险操作）
+mise run db-clean-all        # 删除所有 PostgreSQL 数据
+                             # 需要输入确认：DELETE ALL DATA
 ```
 
 ### 应用管理
