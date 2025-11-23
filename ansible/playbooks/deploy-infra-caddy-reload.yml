@@ -1,8 +1,6 @@
 ---
 - name: Reload Caddy Configuration (Fast)
   hosts: all
-  become: yes
-  become_user: deploy
   gather_facts: no
 
   vars:

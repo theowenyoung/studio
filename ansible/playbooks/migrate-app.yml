@@ -1,8 +1,6 @@
 ---
 - name: Run Application Database Migration
   hosts: all
-  become: yes
-  become_user: deploy
 
   vars:
     service_name: "{{ service_name }}"

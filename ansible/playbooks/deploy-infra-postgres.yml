@@ -1,8 +1,6 @@
 ---
 - name: Deploy PostgreSQL Infrastructure
   hosts: all
-  become: yes
-  become_user: deploy
   gather_facts: no
   vars:
     service_name: "postgres"
@@ -15,6 +13,8 @@
       file:
         path: "{{ remote_dir }}"
         state: directory
+        owner: "{{ deploy_user | default('deploy') }}"
+        group: "{{ deploy_user | default('deploy') }}"
         mode: '0755'
     # ===== Sync files =====
     - name: Sync deploy-dist to server

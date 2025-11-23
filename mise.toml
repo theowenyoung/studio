@@ -247,7 +247,7 @@ run = "bash external-apps/owen-blog/build.sh"
 # 基础设施部署
 [tasks.deploy-infra]
 description = "Deploy all infrastructure services"
-depends = ["deploy-infra-postgres", "deploy-infra-redis", "deploy-infra-caddy", "deploy-infra-backup"]
+run = ["mise run deploy-infra-postgres", "mise run deploy-infra-redis", "mise run deploy-infra-caddy", "mise run deploy-infra-backup"]
 
 [tasks.deploy-infra-postgres]
 description = "Deploy PostgreSQL to production"

@@ -1,8 +1,6 @@
 ---
 - name: Run Backup on Production Server
   hosts: all
-  become: yes
-  become_user: deploy
   gather_facts: no
 
   vars:
