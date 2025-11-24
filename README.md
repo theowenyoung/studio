@@ -6,6 +6,26 @@
 - 需要构建的，放在 `src`, 不需要的，可以放在根目录
 - 统一使用 [mise](https://mise.dev) 作为软件版本/任务管理工具，只在每一个 app 项目内部使用 `package.json` 的 scripts, 根目录的任务管理统一用 mise 的 tasks 来管理，便于所有语言项目统一操作。
 
+## Tips
+
+推荐的 mise bashrc 配置（主要是配置自动补全和别名）
+
+```
+# check mise is exist
+if command -v mise >/dev/null 2>&1; then
+  eval "$(mise activate bash)"
+fi
+
+source <(mise completion bash --include-bash-completion-lib)
+
+# 别人自动补全
+function mr() {
+  mise run "$@"
+}
+
+```
+
+
 
 ## 本地开发
 
@@ -35,15 +55,15 @@ mr env
 docker network create shared
 
 # 启动 service，比如postgres, redis, caddy
-mise run up
+mr up
 
 # 创建数据库和用户
 
-mise run db-init
+mr db-init
 
 # 首次启动 hono 应用, 生成数据库表
 
-mise run migrate-hono
+mr migrate-hono
 
 
 ```
@@ -54,7 +74,7 @@ mise run migrate-hono
 ```
 # 启动特定应用，或者全部应用
 
-mise run dev-hono
+mr dev-hono
 
 # 启动所有应用
 make dev
@@ -103,6 +123,7 @@ make dev
 
 ### 快速开始
 
+
 #### 0. 在 <https://www.hetzner.com/> 创建服务器，并且绑定一个大小大于 10G volume, 用于所有的数据存储。
 
 #### 0. 准备工作
@@ -116,37 +137,47 @@ ansible-galaxy install -r ansible/requirements.yml
 
 ```bash
 # 第一步：创建 deploy 用户（在本地执行）
-mise run server-init-user <server-ip>
+mr server-init-user <server-ip>
 
 # 第二步：配置服务器环境（安全加固、Docker、数据盘挂载等）
-mise run server-init
+mr server-init
 ```
 
 #### 2. 部署基础设施
 
 ```bash
 # 一次性部署所有基础设施（postgres, redis, caddy, backup, 数据库）
-mise run deploy-infra
+mr deploy-infra
 
 # 或分别部署
-mise run deploy-postgres
-mise run deploy-redis
-mise run deploy-caddy
-mise run deploy-backup
-mise run deploy-infra-db-admin
+mr deploy-postgres
+mr deploy-redis
+mr deploy-caddy
+mr deploy-backup
+mr deploy-infra-db-admin
+```
+
+#### 2.5 是否从以前的数据库中恢复?
+
+```
+# ssh 登陆服务器
+mr ssh
+
+cd /srv/studio
+mr db-restore-s3
 ```
 
 #### 3. 部署应用
 
 ```bash
 # 后端应用（Docker 容器 + 零停机）
-mise run deploy-hono
+mr deploy-hono
 
 # 外部应用（Docker 容器 + 零停机）
-mise run deploy-owen-blog
+mr deploy-owen-blog
 
 # SSG 应用（静态文件）
-mise run deploy-storefront
+mr deploy-storefront
 ```
 
 #### 4. 回滚
@@ -183,10 +214,10 @@ mr ssh
 
 ```
 # 备份现有的，如果有需要
-mise run db-backup-now
-# 恢复的时候，postgres 需要是一个全新的示例，并且已经创建了响应的数据库和用户，可以在本地运行 mise run deploy-db-admin 来创建用户
+mr db-backup-now
+# 恢复的时候，postgres 需要是一个全新的示例，并且已经创建了响应的数据库和用户，可以在本地运行 mr deploy-db-admin 来创建用户
 
 # 接下来 restore 最新的 s3 备份
-mise run db-restore-s3
+mr db-restore-s3
 ```
 
