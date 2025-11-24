@@ -18,6 +18,70 @@ ecr_login() {
     docker login --username AWS --password-stdin "$ECR_REGISTRY"
 }
 
+# ===== 应用 ECR 生命周期规则 =====
+apply_ecr_lifecycle_policy() {
+  local repo_name="$1"
+
+  local policy=$(cat <<'EOF'
+{
+  "rules": [
+    {
+      "rulePriority": 1,
+      "description": "删除1天前的未标记镜像",
+      "selection": {
+        "tagStatus": "untagged",
+        "countType": "sinceImagePushed",
+        "countUnit": "days",
+        "countNumber": 1
+      },
+      "action": {
+        "type": "expire"
+      }
+    },
+    {
+      "rulePriority": 2,
+      "description": "生产环境：保留最新5个 prod-* 镜像",
+      "selection": {
+        "tagStatus": "tagged",
+        "tagPrefixList": ["prod-"],
+        "countType": "imageCountMoreThan",
+        "countNumber": 5
+      },
+      "action": {
+        "type": "expire"
+      }
+    },
+    {
+      "rulePriority": 3,
+      "description": "预览环境：删除3天前的 preview-* 镜像",
+      "selection": {
+        "tagStatus": "tagged",
+        "tagPrefixList": ["preview-"],
+        "countType": "sinceImagePushed",
+        "countUnit": "days",
+        "countNumber": 3
+      },
+      "action": {
+        "type": "expire"
+      }
+    }
+  ]
+}
+EOF
+)
+
+  if aws ecr put-lifecycle-policy \
+    --repository-name "$repo_name" \
+    --region "$ECR_REGION" \
+    --lifecycle-policy-text "$policy" >/dev/null 2>&1; then
+    echo "✅ Lifecycle policy applied"
+    return 0
+  else
+    echo "⚠️  Failed to apply lifecycle policy (non-critical)"
+    return 1
+  fi
+}
+
 # ===== 确保 ECR 仓库存在 =====
 ensure_ecr_repo() {
   local repo_name="$1"
@@ -26,6 +90,12 @@ ensure_ecr_repo() {
 
   if aws ecr describe-repositories --repository-names "$repo_name" --region "$ECR_REGION" >/dev/null 2>&1; then
     echo "✅ Repository already exists: $repo_name"
+
+    # 检查是否有生命周期规则
+    if ! aws ecr get-lifecycle-policy --repository-name "$repo_name" --region "$ECR_REGION" >/dev/null 2>&1; then
+      echo "⚙️  Setting up lifecycle policy..."
+      apply_ecr_lifecycle_policy "$repo_name"
+    fi
   else
     echo "📦 Creating ECR repository: $repo_name"
     aws ecr create-repository \
@@ -34,6 +104,10 @@ ensure_ecr_repo() {
       --image-scanning-configuration scanOnPush=true \
       --encryption-configuration encryptionType=AES256
     echo "✅ Repository created: $repo_name"
+
+    # 新仓库立即设置生命周期规则
+    echo "⚙️  Setting up lifecycle policy..."
+    apply_ecr_lifecycle_policy "$repo_name"
   fi
 }
 

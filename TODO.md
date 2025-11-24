@@ -1,5 +1,6 @@
 # TODO
 
+- 运行 mr deploy-infra, db-admin 密码依赖等等，已经app_user 创建
 - stage环境创建，一键部署一个分支。
 - reinstall 系统，测试整个流程是否正常。
 - 创建新的稳定服务器

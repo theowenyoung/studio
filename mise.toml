@@ -503,6 +503,13 @@ description = "Publish psenv to crates.io"
 run = 'cargo publish'
 dir = "rust-packages/psenv"
 
+# ==================== AWS ECR 管理 ====================
+
+[tasks.ecr-setup-lifecycle]
+description = "Setup lifecycle policies for all ECR repositories"
+run = "bash scripts/setup-ecr-lifecycle.sh"
+alias = "ecr-lifecycle"
+
 # ==================== 动态任务 ====================
 
 [tasks.addjs]
