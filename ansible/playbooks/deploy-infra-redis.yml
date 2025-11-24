@@ -1,6 +1,6 @@
 ---
 - name: Deploy Redis Infrastructure
-  hosts: all
+  hosts: prod_servers  # 基础设施默认只在生产环境
   gather_facts: no
 
   vars:

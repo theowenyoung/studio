@@ -6,7 +6,7 @@
 deploy_user: deploy
 
 # ==================== 环境配置 ====================
-deploy_environment: production  # production, staging, development
+deploy_environment: prod  # prod, preview, staging, development
 
 # ==================== 常用工具包 ====================
 # 在系统初始化时安装的常用工具

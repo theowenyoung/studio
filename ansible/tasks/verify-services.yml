@@ -103,24 +103,24 @@
       - "============================================="
   when: geerling_firewall_service is defined or iptables_rules is defined
   tags: [verify, firewall]
-- name: Check fail2ban service (production only)
+- name: Check fail2ban service (prod only)
   systemd:
     name: fail2ban
   register: fail2ban_service
-  when: 
-    - deploy_environment == "production"
+  when:
+    - deploy_environment == "prod"
     - security_fail2ban_enabled | default(true)
   ignore_errors: yes
   tags: [verify, fail2ban]
 
-- name: Verify fail2ban is running (production only)
+- name: Verify fail2ban is running (prod only)
   assert:
     that:
       - fail2ban_service.status.ActiveState == "active"
     fail_msg: "Fail2ban service is not running - security may be compromised"
     success_msg: "Fail2ban service is running"
-  when: 
-    - deploy_environment == "production"
+  when:
+    - deploy_environment == "prod"
     - fail2ban_service is defined
     - fail2ban_service is not skipped
   ignore_errors: "{{ deploy_environment == 'testing' }}"
@@ -166,13 +166,13 @@
   when: port_check is defined
   tags: [verify, ports]
 
-- name: Check system updates (production only)
+- name: Check system updates (prod only)
   command: apt list --upgradable
   register: upgradable_packages
   changed_when: false
-  when: 
+  when:
     - ansible_os_family == "Debian"
-    - deploy_environment == "production"
+    - deploy_environment == "prod"
   tags: [verify, updates]
 
 - name: Count upgradable packages
@@ -236,7 +236,7 @@
       - "SSH Service: {{ 'Running' if ssh_service.status.ActiveState == 'active' else 'Not Running' }}"
       - "Firewall: {{ 'Active (geerlingguy.firewall)' if geerling_firewall_service is defined and geerling_firewall_service.status.ActiveState == 'active' else 'Inactive' }}"
       - "Docker: {{ 'Running' if docker_service.status.ActiveState == 'active' else 'Not Running' }}"
-      - "Fail2ban: {{ 'Running' if deploy_environment == 'production' and fail2ban_service is defined and fail2ban_service.status.ActiveState == 'active' else 'Not Required' if deploy_environment == 'testing' else 'Not Running' }}"
+      - "Fail2ban: {{ 'Running' if deploy_environment == 'prod' and fail2ban_service is defined and fail2ban_service.status.ActiveState == 'active' else 'Not Required' if deploy_environment == 'testing' else 'Not Running' }}"
       - "Disk Usage: {{ disk_used_percent | default('Unknown') }}%"
       - "========================================="
   tags: [verify, summary]
@@ -253,7 +253,7 @@
       - SSH: {{ 'OK' if ssh_service.status.ActiveState == 'active' else 'FAIL' }}
       - Firewall: {{ 'OK (geerlingguy.firewall)' if geerling_firewall_service is defined and geerling_firewall_service.status.ActiveState == 'active' else 'FAIL' }}
       - Docker: {{ 'OK' if docker_service.status.ActiveState == 'active' else 'FAIL' }}
-      - Fail2ban: {{ 'OK' if deploy_environment == 'production' and fail2ban_service is defined and fail2ban_service.status.ActiveState == 'active' else 'N/A' }}
+      - Fail2ban: {{ 'OK' if deploy_environment == 'prod' and fail2ban_service is defined and fail2ban_service.status.ActiveState == 'active' else 'N/A' }}
       
       System Status:
       - Disk Usage: {{ disk_used_percent | default('Unknown') }}%
@@ -262,5 +262,5 @@
       Verification completed successfully.
     dest: /var/log/ansible-security-verify-{{ ansible_date_time.epoch }}.log
     mode: '0644'
-  when: deploy_environment == "production"
+  when: deploy_environment == "prod"
   tags: [verify, report]

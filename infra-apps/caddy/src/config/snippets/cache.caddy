@@ -1,0 +1,36 @@
+# ==================== Cache Snippets ====================
+
+(common_cache) {
+    # 启用压缩（统一在 Caddy 层处理）
+    encode gzip zstd
+
+    # 静态资源长缓存（1年）
+    # 注意：不包含 JSON/XML，因为它们可能是 API 响应
+    @static path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot *.webp *.avif
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    # XML 短缓存（1分钟）- sitemap.xml, feed.xml 等
+    @xml path *.xml
+    header @xml Cache-Control "public, max-age=60"
+}
+
+(ssg_cache) {
+    import common_cache
+
+    # HTML 不缓存（但允许 revalidate）
+    @html path *.html / /*/
+    header @html Cache-Control "public, max-age=0, must-revalidate"
+}
+
+(app_cache) {
+    # 启用压缩（统一在 Caddy 层处理）
+    encode gzip zstd
+
+    # 默认：所有请求都不缓存（动态应用优先保证新鲜度）
+    header Cache-Control "public, max-age=0, must-revalidate"
+
+    # 静态资源长缓存（1年）- 会覆盖上面的默认规则
+    # 不包含 JSON/XML - 它们通常是 API 响应
+    @static path *.js *.css *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2 *.ttf *.eot *.webp *.avif
+    header @static Cache-Control "public, max-age=31536000, immutable"
+}

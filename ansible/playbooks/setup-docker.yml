@@ -6,8 +6,62 @@
   hosts: all
   gather_facts: no  # 使用缓存的 facts
   become: yes
-  
+
   tasks:
+    # =====================================
+    # 前置检查：验证 /data 已挂载
+    # =====================================
+    - name: Verify /data mount
+      include_tasks: ../tasks/verify-data-mount.yml
+      tags: [always]
+
+    # =====================================
+    # 清理旧的容器数据，保留 volumes
+    # =====================================
+    - name: Clean old Docker container data (preserve volumes)
+      shell: |
+        echo "Cleaning old container data..."
+        # 停止所有运行中的容器（如果有）
+        docker ps -aq | xargs -r docker stop 2>/dev/null || true
+        docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
+
+        # 删除旧容器配置和镜像层（保留 volumes）
+        rm -rf /data/docker/containers/* || true
+        rm -rf /data/docker/overlay2/* || true
+
+        # 清理悬空镜像和网络
+        docker system prune -f 2>/dev/null || true
+
+        echo "✅ Cleaned old container data, volumes preserved"
+      register: cleanup_result
+      changed_when: true
+      when: clean_old_containers | default(true)
+      tags: [cleanup]
+
+    - name: Display cleanup result
+      debug:
+        msg: "{{ cleanup_result.stdout_lines }}"
+      when: cleanup_result is defined and cleanup_result.stdout_lines is defined
+      tags: [cleanup]
+
+    # =====================================
+    # 调试：检查进入此步骤前 /srv/studio 的状态
+    # =====================================
+    - name: DEBUG - Check /srv/studio before Docker setup
+      shell: |
+        echo "=== BEFORE Docker Setup ==="
+        ls -la /srv/studio 2>/dev/null || echo "/srv/studio does not exist"
+        find /srv/studio -type d -ls 2>/dev/null || echo "No directories"
+        echo "=== END DEBUG ==="
+      register: debug_before
+      changed_when: false
+      tags: [debug]
+
+    - name: DEBUG - Display /srv/studio state before Docker setup
+      debug:
+        msg: "{{ debug_before.stdout_lines }}"
+      tags: [debug]
+
     # =====================================
     # 配置 Docker 数据目录到 /data/docker
     # =====================================
@@ -75,6 +129,52 @@
       changed_when: false
       tags: [docker-service]
 
+    # =====================================
+    # 调试：检查 /data 硬盘是否有旧的 Docker 数据
+    # =====================================
+    - name: DEBUG - Check for old Docker data on /data
+      shell: |
+        echo "=== Docker Data Directory Contents ==="
+        ls -la /data/docker/ 2>/dev/null || echo "/data/docker does not exist"
+        if [ -d /data/docker/volumes ]; then
+          echo "=== Docker Volumes Found ==="
+          ls -la /data/docker/volumes/
+        fi
+        echo "=== Docker System Info ==="
+        docker system df || true
+        echo "=== Docker Networks ==="
+        docker network ls || true
+        echo "=== Docker Volumes ==="
+        docker volume ls || true
+        echo "=== END DEBUG ==="
+      register: debug_docker_data
+      changed_when: false
+      tags: [debug]
+
+    - name: DEBUG - Display Docker data info
+      debug:
+        msg: "{{ debug_docker_data.stdout_lines }}"
+      tags: [debug]
+
+    # =====================================
+    # 调试：检查 Docker 启动后、创建网络前的状态
+    # =====================================
+    - name: DEBUG - Check /srv/studio after Docker started
+      shell: |
+        echo "=== AFTER Docker Started, BEFORE Network Creation ==="
+        ls -la /srv/studio 2>/dev/null || echo "/srv/studio does not exist"
+        find /srv/studio -type d -ls 2>/dev/null || echo "No directories"
+        stat /srv/studio/infra-apps 2>/dev/null || echo "infra-apps does not exist"
+        echo "=== END DEBUG ==="
+      register: debug_after_docker
+      changed_when: false
+      tags: [debug]
+
+    - name: DEBUG - Display /srv/studio state after Docker started
+      debug:
+        msg: "{{ debug_after_docker.stdout_lines }}"
+      tags: [debug]
+
     - name: Create shared Docker network for all services
       community.docker.docker_network:
         name: shared
@@ -84,6 +184,24 @@
       become_user: "{{ deploy_user | default('deploy') }}"
       tags: [network]
 
+    # =====================================
+    # 调试：检查创建网络后的状态
+    # =====================================
+    - name: DEBUG - Check /srv/studio after network creation
+      shell: |
+        echo "=== AFTER Network Creation ==="
+        ls -la /srv/studio 2>/dev/null || echo "/srv/studio does not exist"
+        find /srv/studio -type d -ls 2>/dev/null || echo "No directories"
+        stat /srv/studio/infra-apps 2>/dev/null || echo "infra-apps does not exist"
+        echo "=== END DEBUG ==="
+      register: debug_after_network
+      changed_when: false
+      tags: [debug]
+
+    - name: DEBUG - Display /srv/studio state after network creation
+      debug:
+        msg: "{{ debug_after_network.stdout_lines }}"
+      tags: [debug]
 
     # =====================================
     # 安装 docker-rollout 零停机部署工具

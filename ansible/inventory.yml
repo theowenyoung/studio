@@ -1,6 +1,23 @@
 all:
-  hosts:
-    production:
-      ansible_host: 5.78.126.18
-      ansible_user: deploy
-      ansible_python_interpreter: /usr/bin/python3
+  children:
+    prod_servers:
+      hosts:
+        prod:
+          ansible_host: 5.78.126.18
+          ansible_user: deploy
+          ansible_python_interpreter: /usr/bin/python3
+      vars:
+        deploy_environment: prod
+
+    preview_servers:
+      hosts:
+        preview:
+          ansible_host: 49.13.31.185
+          ansible_user: deploy
+          ansible_python_interpreter: /usr/bin/python3
+      vars:
+        deploy_environment: preview
+
+  vars:
+    # 共享配置（AWS、ECR 等）
+    ecr_registry: "912951144733.dkr.ecr.us-west-2.amazonaws.com"

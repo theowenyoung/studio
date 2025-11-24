@@ -1,0 +1,36 @@
+---
+# =====================================
+# 验证 /data 已正确挂载
+# =====================================
+# 使用方式:
+#   - include_tasks: ../tasks/verify-data-mount.yml
+
+- name: Verify /data is mounted
+  command: mountpoint -q /data
+  register: data_mount_check
+  failed_when: data_mount_check.rc != 0
+  changed_when: false
+
+- name: Verify /data is writable
+  file:
+    path: /data/.mount-test
+    state: touch
+    mode: '0644'
+  register: data_write_check
+  changed_when: false
+
+- name: Clean up test file
+  file:
+    path: /data/.mount-test
+    state: absent
+
+- name: Get /data mount info
+  shell: df -h /data | tail -1
+  register: data_df
+  changed_when: false
+
+- name: Show /data status
+  debug:
+    msg:
+      - "✅ /data is properly mounted and writable"
+      - "{{ data_df.stdout }}"

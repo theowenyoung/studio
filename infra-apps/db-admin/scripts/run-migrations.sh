@@ -25,12 +25,24 @@ echo "PostgreSQL is ready!"
 echo ""
 
 # ==========================================
+# Determine Environment
+# ==========================================
+# Check if DEPLOY_ENV is set for logging purposes
+DEPLOY_ENV="${DEPLOY_ENV:-unknown}"
+
+echo "Environment: $DEPLOY_ENV"
+echo ""
+
+# ==========================================
 # Run Migrations
 # ==========================================
-echo "Running migrations..."
+echo "Running unified database initialization..."
 
-# Execute all .sh files in /migrations directory
-for script in /migrations/*.sh; do
+# Use the unified migration script
+MIGRATION_DIR="/migrations"
+
+# Execute all .sh files in the migration directory
+for script in "$MIGRATION_DIR"/*.sh; do
   # Check if file exists and is executable
   if [ -f "$script" ] && [ -x "$script" ]; then
     echo "----------------------------------------"

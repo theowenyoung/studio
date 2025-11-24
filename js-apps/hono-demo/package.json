@@ -8,7 +8,7 @@
     "build:server": "vite build --mode production",
     "build": "pnpm build:client && pnpm build:server",
     "start": "NODE_ENV=production PORT=8001 node --env-file=.env dist/server/index.js",
-    "migrate": "node-pg-migrate up",
+    "migrate": "bash ../../scripts/ensure-database.sh && node-pg-migrate up",
     "migrate:down": "node-pg-migrate down",
     "migrate:create": "node-pg-migrate create"
   },

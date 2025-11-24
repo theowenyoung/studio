@@ -1,0 +1,27 @@
+# ==================== Application Services ====================
+
+# Cloudflare AI Gateway Proxy
+remove-cf-for-aigateway.owenyoung.com {
+  reverse_proxy https://gateway.ai.cloudflare.com  {
+    header_up -cf-*
+    header_up Host gateway.ai.cloudflare.com
+  }
+}
+
+# API
+api-demo.owenyoung.com {
+    import app_cache
+    import resilient_proxy api:3000
+}
+
+# Hono Demo
+hono-demo.owenyoung.com {
+    import app_cache
+    import resilient_proxy hono-demo:3000
+}
+
+# Proxy
+proxy-demo.owenyoung.com {
+    import app_cache
+    import resilient_proxy proxy:3000
+}

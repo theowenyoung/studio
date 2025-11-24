@@ -1,6 +1,6 @@
 ---
 - name: Run Backup on Production Server
-  hosts: all
+  hosts: prod_servers  # 备份只在生产环境
   gather_facts: no
 
   vars:

@@ -1,0 +1,32 @@
+# ==================== SSG Sites (nginx containers) ====================
+
+owen-blog-demo.owenyoung.com {
+    # TLS 优化 - 启用 TLS 1.3 和 session resumption
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
+    import ssg_cache
+    import observability
+    import resilient_proxy owen-blog:3000
+}
+
+# Blog
+blog-demo.owenyoung.com {
+    tls {
+        protocols tls1.2 tls1.3
+    }
+    import ssg_cache
+    import observability
+    import resilient_proxy blog:3000
+}
+
+# Storefront
+storefront-demo.owenyoung.com {
+    tls {
+        protocols tls1.2 tls1.3
+    }
+    import ssg_cache
+    import observability
+    import resilient_proxy storefront:3000
+}

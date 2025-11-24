@@ -1,6 +1,6 @@
 ---
 - name: Run Application Database Migration
-  hosts: all
+  hosts: prod_servers  # 迁移默认在生产环境
 
   vars:
     service_name: "{{ service_name }}"

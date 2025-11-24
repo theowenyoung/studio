@@ -50,13 +50,23 @@ build_and_push_image() {
 
   cd "$repo_root"
 
-  echo "📦 Building: $image_name:$version"
+  # 检测环境（如果还没检测）
+  if [ -z "${DEPLOY_ENV:-}" ]; then
+    detect_environment
+  fi
+
+  # 生成标签
+  local tag_latest=$(get_image_tag "latest")
+  local tag_versioned=$(get_image_tag "versioned")
+
+  echo "📦 Building: $image_name"
+  echo "   Tags: $tag_latest, $tag_versioned"
   docker build \
     --platform linux/amd64 \
     -f "$dockerfile" \
     "$@" \
-    -t "$image_name:latest" \
-    -t "$image_name:$version" \
+    -t "$image_name:$tag_latest" \
+    -t "$image_name:$tag_versioned" \
     .
 
   echo "📤 Pushing to ECR..."
@@ -67,6 +77,74 @@ build_and_push_image() {
   local repo_name="${image_name#$ECR_REGISTRY/}"
   ensure_ecr_repo "$repo_name"
 
-  docker push "$image_name:latest"
-  docker push "$image_name:$version"
+  docker push "$image_name:$tag_latest"
+  docker push "$image_name:$tag_versioned"
+}
+
+# ===== 环境检测 =====
+detect_environment() {
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
+    export CURRENT_BRANCH="$current_branch"
+    export BRANCH_CLEAN=$(echo "$current_branch" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-30)
+    export DEPLOY_TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+
+    if [ "$current_branch" = "main" ]; then
+        export DEPLOY_ENV="prod"
+        export ANSIBLE_TARGET="prod"
+    else
+        export DEPLOY_ENV="preview"
+        export ANSIBLE_TARGET="preview"
+    fi
+}
+
+# ===== 生成服务名（带分支后缀）=====
+get_service_name() {
+    local base_service=$1
+    if [ "$DEPLOY_ENV" = "preview" ]; then
+        echo "${base_service}-${BRANCH_CLEAN}"
+    else
+        echo "${base_service}"
+    fi
+}
+
+# ===== 生成数据库名 =====
+get_database_name() {
+    local base_service=$1
+    local db_base=$(echo "$base_service" | tr '-' '_')
+    if [ "$DEPLOY_ENV" = "preview" ]; then
+        echo "${db_base}_${BRANCH_CLEAN//-/_}"
+    else
+        echo "${db_base}"
+    fi
+}
+
+# ===== 生成域名 =====
+get_domain() {
+    local base_service=$1
+    if [ "$DEPLOY_ENV" = "preview" ]; then
+        # 格式：branch-service-preview.owenyoung.com
+        echo "${BRANCH_CLEAN}-${base_service}-preview.owenyoung.com"
+    else
+        echo "${base_service}.owenyoung.com"
+    fi
+}
+
+# ===== 生成镜像标签 =====
+get_image_tag() {
+    local tag_type=$1  # "latest" or "versioned"
+
+    if [ "$DEPLOY_ENV" = "preview" ]; then
+        if [ "$tag_type" = "latest" ]; then
+            echo "preview-${BRANCH_CLEAN}"
+        else
+            echo "preview-${BRANCH_CLEAN}-${DEPLOY_TIMESTAMP}"
+        fi
+    else
+        # 生产环境加 prod- 前缀
+        if [ "$tag_type" = "latest" ]; then
+            echo "prod-latest"
+        else
+            echo "prod-${DEPLOY_TIMESTAMP}"
+        fi
+    fi
 }

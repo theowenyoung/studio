@@ -189,6 +189,32 @@ description = "Initialize database (run admin migrations)"
 run = "docker compose run --rm db-admin"
 dir = "infra-apps/db-admin"
 
+[tasks.db-init-prod-mode]
+description = "Initialize local database with production-like setup"
+run = '''
+#!/bin/bash
+echo "🔧 Initializing production-like local database..."
+echo ""
+echo "This will create:"
+echo "  - Individual users for each application"
+echo "  - Read-only users"
+echo "  - Proper permission isolation"
+echo ""
+read -p "Continue? (yes/no): " confirm
+
+if [ "$confirm" != "yes" ]; then
+    echo "Aborted."
+    exit 0
+fi
+
+# Run production migrations locally
+docker compose run --rm -e DEPLOY_ENV=prod db-admin
+echo ""
+echo "✅ Production-like database initialized!"
+echo "💡 Update your .env files to use production credentials"
+'''
+dir = "infra-apps/db-admin"
+
 [tasks.db-migrate]
 description = "Run all application migrations"
 run = 'pnpm --filter "./js-apps/*" migrate'
@@ -250,19 +276,19 @@ description = "Deploy all infrastructure services"
 run = ["mise run deploy-infra-postgres", "mise run deploy-infra-redis", "mise run deploy-infra-caddy", "mise run deploy-infra-backup", "mise run deploy-infra-db-admin"]
 
 [tasks.deploy-infra-postgres]
-description = "Deploy PostgreSQL to production"
+description = "Deploy PostgreSQL to prod"
 depends = ["build-infra-postgres"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-postgres.yml"
 alias = "deploy-postgres"
 
 [tasks.deploy-infra-redis]
-description = "Deploy Redis to production"
+description = "Deploy Redis to prod"
 depends = ["build-infra-redis"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-redis.yml"
 alias = "deploy-redis"
 
 [tasks.deploy-infra-caddy]
-description = "Deploy Caddy to production"
+description = "Deploy Caddy to prod"
 depends = ["build-infra-caddy"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy.yml"
 alias = "deploy-caddy"
@@ -273,56 +299,56 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-
 alias = "reload-caddy"
 
 [tasks.deploy-infra-backup]
-description = "Deploy backup service to production"
+description = "Deploy backup service to prod"
 depends = ["build-infra-backup"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-backup.yml"
 
-# JS 应用部署
+# JS 应用部署（智能检测环境：main=production, 其他=preview）
 [tasks.deploy-apps]
 description = "Deploy all applications"
 run = ["mise run deploy-hono-demo", "mise run deploy-proxy", "mise run deploy-blog", "mise run deploy-storefront", "mise run deploy-meilisearch", "mise run deploy-owen-blog"]
 
 [tasks.deploy-hono-demo]
-description = "Deploy hono-demo to production"
+description = "Deploy hono-demo (auto-detect environment)"
 depends = ["build-hono-demo"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=hono-demo"
+run = "bash scripts/deploy-app.sh hono-demo"
 alias = "deploy-hono"
 
 [tasks.deploy-proxy]
-description = "Deploy proxy to production"
+description = "Deploy proxy (auto-detect environment)"
 depends = ["build-proxy"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=proxy"
+run = "bash scripts/deploy-app.sh proxy"
 
 [tasks.deploy-blog]
-description = "Deploy blog to production"
+description = "Deploy blog (auto-detect environment)"
 depends = ["build-blog"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=blog"
+run = "bash scripts/deploy-app.sh blog"
 
 [tasks.deploy-storefront]
-description = "Deploy storefront to production"
+description = "Deploy storefront (auto-detect environment)"
 depends = ["build-storefront"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-app.yml -e service_name=storefront"
+run = "bash scripts/deploy-app.sh storefront"
 
 # External 应用部署
 [tasks.deploy-meilisearch]
-description = "Deploy meilisearch to production"
+description = "Deploy meilisearch to prod"
 depends = ["build-meilisearch"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-external-app.yml -e service_name=meilisearch"
 
 [tasks.deploy-owen-blog]
-description = "Deploy owen-blog to production"
+description = "Deploy owen-blog to prod"
 depends = ["build-owen-blog"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-external-app.yml -e service_name=owen-blog"
 
 # 数据库迁移部署
 [tasks.deploy-infra-db-admin]
-description = "Run database migrations in production"
+description = "Run database migrations in prod"
 depends = ["build-db-admin"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-db-admin.yml"
 alias = "deploy-db-admin"
 
 [tasks.deploy-migrate-hono]
-description = "Run hono-demo migrations in production"
+description = "Run hono-demo migrations in prod"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.yml -e service_name=hono-demo"
 
 
@@ -331,8 +357,13 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.y
 # 快捷 SSH 连接
 
 [tasks.ssh]
-description = "SSH to production server and cd to /srv/studio"
+description = "SSH to prod server and cd to /srv/studio"
 run = 'ssh -t deploy@5.78.126.18 "cd /srv/studio && exec bash -l"'
+alias = "ssh-prod"
+
+[tasks.ssh-preview]
+description = "SSH to preview server and cd to /srv/studio"
+run = 'ssh -t deploy@49.13.31.185 "cd /srv/studio && exec bash -l"'
 
 # 用脚本创建初始用户
 [tasks.server-init-user]
@@ -347,36 +378,79 @@ ssh ${usage_user?}@${usage_ip?} 'bash create-init-user.sh'
 '''
 
 # 服务器初始化
-[tasks.server-init]
-description = "Initialize server (security, docker, directories, mise, aliases)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true"
+[tasks.server-init-prod]
+description = "Initialize prod server (security, docker, directories, mise, aliases)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l prod"
+
+[tasks.server-init-preview]
+description = "Initialize preview server (security, docker, directories, mise, aliases)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l preview"
+
+[tasks.server-init-all]
+description = "Initialize all servers (use with caution)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l all"
+alias = "server-init"
 
 # 服务器普通更新
-[tasks.server-update]
-description = "Update server configuration (skip system update)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml"
+[tasks.server-update-prod]
+description = "Update prod server configuration (skip system update)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -l prod"
+
+[tasks.server-update-preview]
+description = "Update preview server configuration (skip system update)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -l preview"
+
+[tasks.server-update-all]
+description = "Update all servers configuration (skip system update)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -l all"
+alias = "server-update"
 
 
 # 同步服务器配置
-[tasks.server-sync-config]
-description = "Sync server-mise.toml and bash_aliases to server"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/sync-server-config.yml"
+[tasks.server-sync-config-prod]
+description = "Sync server-mise.toml and bash_aliases to prod server"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/sync-server-config.yml -l prod"
+
+[tasks.server-sync-config-preview]
+description = "Sync server-mise.toml and bash_aliases to preview server"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/sync-server-config.yml -l preview"
+
+[tasks.server-sync-config-all]
+description = "Sync server-mise.toml and bash_aliases to all servers"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/sync-server-config.yml -l all"
 alias = "sync-config"
 
-[tasks.server-configure-aws]
-description = "Configure AWS credentials on server (for ECR access)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml"
+[tasks.server-configure-aws-prod]
+description = "Configure AWS credentials on prod server (for ECR access)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml -l prod"
+
+[tasks.server-configure-aws-preview]
+description = "Configure AWS credentials on preview server (for ECR access)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml -l preview"
+
+[tasks.server-configure-aws-all]
+description = "Configure AWS credentials on all servers (for ECR access)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml -l all"
+alias = "server-configure-aws"
 
 # 备份与恢复（通过 Ansible 触发）
 [tasks.server-backup]
-description = "Run backup on production server"
+description = "Run backup on prod server"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/run-backup.yml"
 alias = "backup"
 
 # Volume 管理
-[tasks.server-resize-volume]
-description = "Resize Hetzner volume (expand filesystem)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml"
+[tasks.server-resize-volume-prod]
+description = "Resize Hetzner volume on prod server (expand filesystem)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l prod"
+
+[tasks.server-resize-volume-preview]
+description = "Resize Hetzner volume on preview server (expand filesystem)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l preview"
+
+[tasks.server-resize-volume-all]
+description = "Resize Hetzner volume on all servers (expand filesystem)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l all"
 alias = "resize"
 
 # Note: 其他服务器运维任务（查看日志、恢复数据库、查看备份等）
@@ -446,3 +520,18 @@ arg "<project>"
 arg "[args]" var=#true
 '''
 run = 'pnpm --filter "./js-apps/${usage_project?}" ${usage_args?}'
+
+# ==================== 预览环境管理 ====================
+
+[tasks.preview-info]
+description = "Show current branch's preview environment info"
+alias = "info"
+run = "bash scripts/preview-info.sh"
+
+[tasks.preview-destroy]
+description = "Destroy current branch's preview environment"
+run = "bash scripts/preview-destroy.sh"
+
+[tasks.preview-list]
+description = "List all active preview environments on preview server"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/list-previews.yml -l preview"

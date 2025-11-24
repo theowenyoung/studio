@@ -1,6 +1,6 @@
 ---
 - name: Reload Caddy Configuration (Fast)
-  hosts: all
+  hosts: "{{ target_host | default('prod_servers') }}"  # 默认生产，但支持覆盖
   gather_facts: no
 
   vars:

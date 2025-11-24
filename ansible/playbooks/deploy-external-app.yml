@@ -1,6 +1,6 @@
 ---
 - name: Deploy External Application
-  hosts: all
+  hosts: prod_servers  # 外部应用默认在生产环境
   gather_facts: no
 
   vars:

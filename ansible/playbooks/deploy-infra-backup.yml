@@ -1,6 +1,6 @@
 ---
 - name: Deploy Backup Service
-  hosts: all
+  hosts: prod_servers  # 备份只在生产环境
   gather_facts: no
 
   vars:
@@ -11,6 +11,10 @@
   tasks:
     - debug:
         msg: "🚀 Deploying Backup service"
+
+    - name: Verify /data mount
+      include_tasks: ../tasks/verify-data-mount.yml
+      tags: [always]
 
     - name: Create /data/backups directory
       become: yes

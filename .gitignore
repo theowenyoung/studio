@@ -19,3 +19,6 @@ deploy-dist/
 .env.*
 # 示例环境变量需要保留
 !.env.example
+
+# Caddy 预览环境配置（自动生成，不提交）
+infra-apps/caddy/src/config/preview/

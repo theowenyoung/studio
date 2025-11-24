@@ -1,6 +1,6 @@
 ---
 - name: Deploy DB Admin (Run Migrations)
-  hosts: all
+  hosts: prod_servers  # 数据库迁移默认在生产环境
   gather_facts: no
 
   vars:
