@@ -542,3 +542,10 @@ run = "bash scripts/preview-destroy.sh"
 [tasks.preview-list]
 description = "List all active preview environments on preview server"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/list-previews.yml -l preview"
+
+[tasks.preview-list-old]
+description = "List all old preview databases (default: >7 days)"
+run = "bash scripts/preview-list-old.sh"
+usage = '''
+arg "[days]" help="Age threshold in days (default: 7)"
+'''

@@ -85,16 +85,10 @@ make dev
 
 详细部署文档请查看 [DEPLOYMENT.md](./DEPLOYMENT.md)
 
-### AWS ECR 设置
 
-#### 自动化设置 ✅
+### 知识
 
-**生命周期规则会在首次构建时自动设置！** 无需手动操作。
-
-每次执行 `mise run deploy-*` 或 `mise run build-*` 时：
-- ✅ 自动检查 ECR 仓库是否存在
-- ✅ 自动创建仓库（如果不存在）
-- ✅ 自动应用生命周期规则（如果没有规则）
+ECR 镜像的生命周期规则会在首次构建时自动设置！ 无需手动操作。
 
 **对于已有仓库**（首次迁移到此配置）：
 
@@ -103,68 +97,14 @@ make dev
 mise run ecr-lifecycle
 ```
 
-#### 生命周期规则说明
-
-如果需要了解或手动修改规则，可以在 ECR 控制台查看：
-
-```json
-{
-  "rules": [
-    {
-      "rulePriority": 1,
-      "description": "删除1天前的未标记镜像",
-      "selection": {
-        "tagStatus": "untagged",
-        "countType": "sinceImagePushed",
-        "countUnit": "days",
-        "countNumber": 1
-      },
-      "action": {
-        "type": "expire"
-      }
-    },
-    {
-      "rulePriority": 2,
-      "description": "生产环境：保留最新5个 prod-* 镜像",
-      "selection": {
-        "tagStatus": "tagged",
-        "tagPrefixList": ["prod-"],
-        "countType": "imageCountMoreThan",
-        "countNumber": 5
-      },
-      "action": {
-        "type": "expire"
-      }
-    },
-    {
-      "rulePriority": 3,
-      "description": "预览环境：删除3天前的 preview-* 镜像",
-      "selection": {
-        "tagStatus": "tagged",
-        "tagPrefixList": ["preview-"],
-        "countType": "sinceImagePushed",
-        "countUnit": "days",
-        "countNumber": 3
-      },
-      "action": {
-        "type": "expire"
-      }
-    }
-  ]
-}
-```
-
 **镜像标签规则**：
 - **生产环境** (main 分支)：
   - `prod-latest` - 最新版本
   - `prod-20251125143052` - 带时间戳的历史版本
-  - 策略：保留最新 5 个版本（支持快速回滚）
 
 - **预览环境** (其他分支)：
   - `preview-{branch}` - 分支的最新版本（如 `preview-feature-x`）
   - `preview-{branch}-20251125143052` - 带时间戳的版本
-  - 策略：删除 3 天前的镜像（支持多分支并行开发，自动清理过期分支）
-  - 注意：preview 服务器已缓存镜像，ECR 删除不影响运行中的容器
 
 ### 快速开始
 

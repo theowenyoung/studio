@@ -1,17 +1,6 @@
 # ==================== Resilient Proxy ====================
-# 单服务器部署的弹性配置 - 在服务重启期间保持请求等待
+# 单服务器部署的弹性配置
 (resilient_proxy) {
-    # try_duration: 在上游不可用时保持请求等待的时间
-    # 这样服务重启时不会立即返回 502，而是等待服务恢复
-    reverse_proxy {args[0]} {
-        # 等待最多 15 秒让服务恢复（足够覆盖大多数重启场景）
-        try_duration 15s
-
-        # 健康检查失败后的重试间隔
-        fail_duration 5s
-
-        # 单个请求的超时（总时间包含等待）
-        # 设置为 try_duration + 正常请求时间
-        # timeout 60s
-    }
+    # 基础反向代理配置
+    reverse_proxy {args[0]}
 }

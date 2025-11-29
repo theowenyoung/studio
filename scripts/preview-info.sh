@@ -48,4 +48,15 @@ else
         tag=$(get_image_tag "latest")
         echo "   • $service:$tag"
     done
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Querying database status on prod server..."
+    echo ""
+
+    # Query database info using Ansible
+    ansible-playbook -i ansible/inventory.yml \
+      ansible/playbooks/list-preview-dbs.yml \
+      -e branch_name=$BRANCH_CLEAN \
+      -l prod 2>/dev/null || echo "⚠️  Could not query database information"
 fi

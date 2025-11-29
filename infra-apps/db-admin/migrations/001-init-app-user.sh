@@ -9,28 +9,26 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Unified Database Initialization
 # ==========================================
 # Works for all environments: local, preview, production
-# Password source: POSTGRES_APP_USER_PASSWORD env var (with fallback to 'dev' for local)
+# Password source: POSTGRES_APP_USER_PASSWORD env var (required)
 # ==========================================
 
-echo "🔧 Setting up database infrastructure..."
+log "🔧 Setting up database infrastructure..."
 
-# Get password from environment variable, fallback to 'dev' for local development
-APP_USER_PASSWORD="${POSTGRES_APP_USER_PASSWORD:-dev}"
-
-# Detect environment for logging
-if [ "$APP_USER_PASSWORD" = "dev" ]; then
-    ENVIRONMENT="local development"
-else
-    ENVIRONMENT="preview/production"
+# Require password from environment variable
+if [ -z "${POSTGRES_APP_USER_PASSWORD}" ]; then
+    echo "❌ Error: POSTGRES_APP_USER_PASSWORD environment variable is required"
+    echo "Please set it before running this script:"
+    echo "  export POSTGRES_APP_USER_PASSWORD='your-secure-password'"
+    exit 1
 fi
 
-echo "   Environment: $ENVIRONMENT"
+APP_USER_PASSWORD="${POSTGRES_APP_USER_PASSWORD}"
 
 # ==========================================
 # Create Shared Application User
 # ==========================================
 
-echo "📦 Creating shared application user: app_user"
+log "📦 Creating shared application user: app_user"
 
 psql -v ON_ERROR_STOP=1 <<-EOSQL
     -- Create user (no CREATEDB privilege)
@@ -49,22 +47,15 @@ psql -v ON_ERROR_STOP=1 <<-EOSQL
     GRANT app_user TO postgres;
 EOSQL
 
-echo "✅ Database infrastructure ready!"
-echo ""
-echo "📋 Summary:"
-echo "   User:     app_user (no CREATEDB privilege)"
-echo "   Password: $([ "$APP_USER_PASSWORD" = "dev" ] && echo "dev (hardcoded for local)" || echo "from POSTGRES_APP_USER_PASSWORD")"
-echo "   Note:     Databases created by postgres automatically"
-echo ""
-echo "💡 Usage:"
-if [ "$APP_USER_PASSWORD" = "dev" ]; then
-    echo "   DATABASE_URL=postgresql://app_user:dev@localhost:5432/<db_name>"
-    echo ""
-    echo "🚀 Run migrations with:"
-    echo "   pnpm migrate  # or mise run db-migrate-<app>"
-else
-    echo "   DATABASE_URL=postgresql://app_user:<password>@<host>:5432/<db_name>"
-    echo ""
-    echo "🚀 Databases created automatically during deployment"
-fi
-echo ""
+log_success "Database infrastructure ready!"
+log ""
+log "📋 Summary:"
+log "   User:     app_user (no CREATEDB privilege)"
+log "   Password: from POSTGRES_APP_USER_PASSWORD"
+log "   Note:     Databases created by postgres automatically"
+log ""
+log "💡 Usage:"
+log "   DATABASE_URL=postgresql://app_user:<password>@<host>:5432/<db_name>"
+log ""
+log "🚀 Databases created automatically during deployment"
+log ""

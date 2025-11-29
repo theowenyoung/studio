@@ -60,9 +60,13 @@ docker compose down  # 需要手动清理
 
 ## 创建新的数据库
 
-### 在 migrations/ 目录创建新脚本
+有两种方式创建数据库，取决于你的安全需求：
 
-例如 `002-create-myapp-db.sh`:
+### 方式 1: 使用共享的 app_user（推荐用于大多数应用）
+
+适用场景：大多数普通应用，简化用户管理
+
+参考：`migrations/002-create-hono-demo-db.sh`
 
 ```sh
 #!/bin/sh
@@ -72,37 +76,118 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/../scripts/common.sh"
 
-# 数据库配置
+# ==========================================
+# Configuration - Modify these variables
+# ==========================================
 DB_NAME="myapp"
-DB_DESCRIPTION="My Application Database"
 
-# 从环境变量读取密码
-RW_PASSWORD="${POSTGRES_MYAPP_USER_PASSWORD:?Error: not set}"
-RO_PASSWORD="${POSTGRES_MYAPP_READONLY_PASSWORD:?Error: not set}"
+# ==========================================
+# Create Database with Shared app_user
+# ==========================================
 
-# 创建数据库
-create_database_with_users \
-  "$DB_NAME" \
-  "$RW_PASSWORD" \
-  "$RO_PASSWORD" \
-  "$DB_DESCRIPTION"
+create_database_with_app_user "$DB_NAME"
 ```
 
-### 添加权限并配置密码
+**优点**：
+- 极其简单，只需修改 `DB_NAME` 变量
+- 共享 app_user，减少用户数量
+- 适合大多数应用场景
+- 所有逻辑都封装在 `common.sh` 中
 
+**环境变量**：
+- 只需要 `POSTGRES_APP_USER_PASSWORD`（已在 001 迁移中配置）
+
+**使用**：
 ```bash
-# 添加执行权限
-chmod +x migrations/002-create-myapp-db.sh
-
-# 在 .env 中添加密码
-echo "POSTGRES_MYAPP_USER_PASSWORD=your_rw_password" >> .env
-echo "POSTGRES_MYAPP_READONLY_PASSWORD=your_ro_password" >> .env
+DATABASE_URL=postgresql://app_user:<password>@<host>:5432/myapp
 ```
+
+---
+
+### 方式 2: 创建独立用户和数据库（用于高安全需求）
+
+适用场景：需要严格隔离的应用，或需要独立的只读用户
+
+参考：`migrations/003-create-demo-db-with-dedicated-user.sh`
+
+**步骤**：
+
+1. **创建迁移脚本** `migrations/00X-create-myapp-db-with-dedicated-user.sh`:
+
+```sh
+#!/bin/sh
+set -e
+
+# Source the functions library
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/../scripts/common.sh"
+
+# ==========================================
+# Configuration - Modify these variables
+# ==========================================
+DB_NAME="myapp"
+USER_NAME="myapp"
+USER_PASSWORD_ENV="POSTGRES_MYAPP_USER_PASSWORD"
+READONLY_PASSWORD_ENV="POSTGRES_MYAPP_READONLY_PASSWORD"
+
+# ==========================================
+# Create Dedicated Database with Users
+# ==========================================
+
+# Validate required environment variables
+require_env_var "$USER_PASSWORD_ENV"
+require_env_var "$READONLY_PASSWORD_ENV"
+
+# Get passwords from environment
+eval USER_PASSWORD="\$$USER_PASSWORD_ENV"
+eval READONLY_PASSWORD="\$$READONLY_PASSWORD_ENV"
+
+# Create database with dedicated users
+create_database_with_dedicated_users "$DB_NAME" "$USER_NAME" "$USER_PASSWORD" "$READONLY_PASSWORD"
+```
+
+2. **添加执行权限**：
+```bash
+chmod +x migrations/00X-create-myapp-db-with-dedicated-user.sh
+```
+
+3. **配置环境变量** 在 `.env.example` 和 `.env` 中添加：
+```bash
+POSTGRES_MYAPP_USER_PASSWORD=
+POSTGRES_MYAPP_READONLY_PASSWORD=
+```
+
+**优点**：
+- 完全隔离，每个应用有独立的用户
+- 支持只读用户（适合分析、报表等场景）
+- 更高的安全性
+- 配置清晰，所有变量集中在顶部
+- 所有逻辑都封装在 `common.sh` 中
+
+**使用**：
+```bash
+# 读写
+DATABASE_URL=postgresql://myapp:<password>@<host>:5432/myapp
+
+# 只读
+DATABASE_URL=postgresql://myapp_readonly:<password>@<host>:5432/myapp
+```
+
+---
+
+### 选择建议
+
+- **使用方式 1（共享 app_user）**：大多数内部应用、开发环境
+- **使用方式 2（独立用户）**：生产环境、需要只读访问、高安全要求的应用
 
 ### 运行迁移
 
 ```bash
-mise run db:admin:migrations
+# 本地开发
+mise run db-init
+
+# 生产部署
+mise run deploy-db-admin
 ```
 
 ## 注意事项
