@@ -53,7 +53,7 @@
         CREATE DATABASE {{ database_name }} OWNER app_user;
         REVOKE CONNECT ON DATABASE {{ database_name }} FROM PUBLIC;
         GRANT CONNECT ON DATABASE {{ database_name }} TO app_user;
-        COMMENT ON DATABASE {{ database_name }} IS 'Environment: {{ target_env }} | Branch: {{ branch_name }} | Service: {{ service_base }} | Created: {{ ansible_date_time.iso8601 }}';
+        COMMENT ON DATABASE {{ database_name }} IS 'Environment: {{ target_env }} | Branch: {{ branch_name }} | Service: {{ service_base }} | Created: $(date -u +%Y-%m-%dT%H:%M:%SZ)';
         "
       changed_when: false
       failed_when: false
