@@ -25,7 +25,7 @@ mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 
 # ===== 3. 生成 docker-compose.yml（使用模板 + envsubst） =====
 export SERVICE_NAME
-export IMAGE_TAG="$IMAGE:$VERSION"
+export IMAGE_TAG="$IMAGE_TAG_VERSIONED"
 
 envsubst < "$SCRIPT_DIR/../../docker/nodejs-ssg/docker-compose.template.yml" > "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
 

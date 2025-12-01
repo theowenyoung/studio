@@ -50,7 +50,7 @@ mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 
 # 生成 docker-compose.yml（复用 nodejs-ssg 模板）
 export SERVICE_NAME
-export IMAGE_TAG="$IMAGE:$VERSION"
+export IMAGE_TAG="$IMAGE_TAG_VERSIONED"
 envsubst < "$REPO_ROOT/docker/nodejs-ssg/docker-compose.template.yml" > "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
 
 # 写入版本号

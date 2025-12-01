@@ -420,6 +420,14 @@
             state: mounted
           register: mount_result
 
+        - name: Set ownership after mount
+          file:
+            path: "{{ data_mount_point }}"
+            owner: "{{ deploy_user | default('deploy') }}"
+            group: "{{ deploy_user | default('deploy') }}"
+            mode: '0755'
+            state: directory
+
         - name: Verify mount
           command: df -h "{{ data_mount_point }}"
           register: df_final

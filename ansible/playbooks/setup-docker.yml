@@ -1,84 +1,74 @@
 ---
 # =====================================
-# Docker 环境和工具准备
+# Docker 环境和工具准备 - 修正版
 # =====================================
 - name: Setup Docker Environment and Tools
   hosts: all
-  gather_facts: no  # 使用缓存的 facts
+  gather_facts: no
   become: yes
+  vars:
+    # 设置为 true 将会执行“核弹级”清理（只保留 volumes，清除镜像和容器）
+    # 建议默认 false，防止误删镜像导致重新拉取时间过长
+    # 运行时可通过 -e reset_docker=true 强制开启
+    reset_docker: true 
 
   tasks:
     # =====================================
-    # 前置检查：验证 /data 已挂载
+    # 1. 基础检查
     # =====================================
     - name: Verify /data mount
       include_tasks: ../tasks/verify-data-mount.yml
       tags: [always]
 
     # =====================================
-    # 清理旧的容器数据，保留 volumes
+    # 2. 停止 Docker (配置前必须停止)
     # =====================================
-    - name: Clean old Docker container data (preserve volumes)
+    - name: Stop Docker service
+      systemd:
+        name: docker
+        state: stopped
+      ignore_errors: yes
+      tags: [docker-setup]
+
+    # =====================================
+    # 3. 核心修复逻辑：安全清理旧数据
+    #    只保留 volumes，删除其他所有 Docker 内部数据
+    # =====================================
+    - name: HARD RESET - Clean Docker root but PRESERVE volumes
       shell: |
-        echo "Cleaning old container data..."
-        # 停止所有运行中的容器（如果有）
-        docker ps -aq | xargs -r docker stop 2>/dev/null || true
-        docker ps -aq | xargs -r docker rm -f 2>/dev/null || true
-
-        # 删除旧容器配置和镜像层（保留 volumes）
-        rm -rf /data/docker/containers/* || true
-        rm -rf /data/docker/overlay2/* || true
-
-        # 清理悬空镜像和网络
-        docker system prune -f 2>/dev/null || true
-
-        echo "✅ Cleaned old container data, volumes preserved"
-      register: cleanup_result
-      changed_when: true
-      when: clean_old_containers | default(true)
+        echo "Performing Hard Reset of Docker Data..."
+        
+        # 确保目录存在
+        if [ -d "/data/docker" ]; then
+            # 1. 查找除了 'volumes' 以外的所有一级子目录并删除
+            # -mindepth 1: 不删除 /data/docker 本身
+            # -maxdepth 1: 只看第一层
+            # -not -name 'volumes': 排除 volumes 目录
+            find /data/docker -mindepth 1 -maxdepth 1 -type d -not -name 'volumes' -exec rm -rf '{}' +
+            
+            # 2. 删除所有非目录文件 (如之前的 daemon.json 或锁文件)
+            find /data/docker -mindepth 1 -maxdepth 1 -type f -delete
+            
+            echo "✅ Docker data wiped, volumes preserved."
+        else
+            echo "Directory /data/docker does not exist, skipping clean."
+        fi
+      # 触发条件：
+      # 1. 显式传入了 reset_docker=true
+      # 2. 或者检测到 overlay2 目录缺失/损坏（通过之前的错误推断，这里我们简单依赖变量）
+      when: reset_docker | bool
       tags: [cleanup]
 
-    - name: Display cleanup result
-      debug:
-        msg: "{{ cleanup_result.stdout_lines }}"
-      when: cleanup_result is defined and cleanup_result.stdout_lines is defined
-      tags: [cleanup]
-
     # =====================================
-    # 调试：检查进入此步骤前 /srv/studio 的状态
+    # 4. 配置 Docker
     # =====================================
-    - name: DEBUG - Check /srv/studio before Docker setup
-      shell: |
-        echo "=== BEFORE Docker Setup ==="
-        ls -la /srv/studio 2>/dev/null || echo "/srv/studio does not exist"
-        find /srv/studio -type d -ls 2>/dev/null || echo "No directories"
-        echo "=== END DEBUG ==="
-      register: debug_before
-      changed_when: false
-      tags: [debug]
-
-    - name: DEBUG - Display /srv/studio state before Docker setup
-      debug:
-        msg: "{{ debug_before.stdout_lines }}"
-      tags: [debug]
-
-    # =====================================
-    # 配置 Docker 数据目录到 /data/docker
-    # =====================================
-    - name: Create Docker data directory on /data mount
+    - name: Ensure Docker data directory exists
       file:
         path: /data/docker
         state: directory
         mode: '0710'
         owner: root
         group: root
-      tags: [docker-config]
-
-    - name: Stop Docker service before configuration
-      systemd:
-        name: docker
-        state: stopped
-      ignore_errors: yes
       tags: [docker-config]
 
     - name: Ensure Docker config directory exists
@@ -88,7 +78,7 @@
         mode: '0755'
       tags: [docker-config]
 
-    - name: Configure Docker daemon to use /data/docker
+    - name: Configure Docker daemon
       copy:
         dest: /etc/docker/daemon.json
         content: |
@@ -102,22 +92,17 @@
             "storage-driver": "overlay2"
           }
         mode: '0644'
-      register: docker_config
       tags: [docker-config]
 
-    - name: Restart Docker if config changed
-      systemd:
-        name: docker
-        state: restarted
-        daemon_reload: yes
-      when: docker_config.changed
-      tags: [docker-config, docker-service]
-
-    - name: Ensure Docker daemon is running
+    # =====================================
+    # 5. 启动 Docker
+    # =====================================
+    - name: Start and Enable Docker service
       systemd:
         name: docker
         state: started
         enabled: yes
+        daemon_reload: yes
       tags: [docker-service]
 
     - name: Wait for Docker to be ready
@@ -130,95 +115,40 @@
       tags: [docker-service]
 
     # =====================================
-    # 调试：检查 /data 硬盘是否有旧的 Docker 数据
+    # 6. 常规清理 (Soft Prune)
+    #    即使不进行 Hard Reset，也清理悬空资源
     # =====================================
-    - name: DEBUG - Check for old Docker data on /data
+    - name: Prune Docker system (Soft Clean)
       shell: |
-        echo "=== Docker Data Directory Contents ==="
-        ls -la /data/docker/ 2>/dev/null || echo "/data/docker does not exist"
-        if [ -d /data/docker/volumes ]; then
-          echo "=== Docker Volumes Found ==="
-          ls -la /data/docker/volumes/
-        fi
-        echo "=== Docker System Info ==="
-        docker system df || true
-        echo "=== Docker Networks ==="
-        docker network ls || true
-        echo "=== Docker Volumes ==="
-        docker volume ls || true
-        echo "=== END DEBUG ==="
-      register: debug_docker_data
-      changed_when: false
-      tags: [debug]
-
-    - name: DEBUG - Display Docker data info
-      debug:
-        msg: "{{ debug_docker_data.stdout_lines }}"
-      tags: [debug]
+        # 清理悬空的镜像、停止的容器、未使用的网络
+        # 注意：这里不加 --volumes，确保数据绝对安全
+        docker system prune -a -f
+      when: not (reset_docker | bool)
+      tags: [cleanup]
 
     # =====================================
-    # 调试：检查 Docker 启动后、创建网络前的状态
+    # 7. 网络配置
     # =====================================
-    - name: DEBUG - Check /srv/studio after Docker started
-      shell: |
-        echo "=== AFTER Docker Started, BEFORE Network Creation ==="
-        ls -la /srv/studio 2>/dev/null || echo "/srv/studio does not exist"
-        find /srv/studio -type d -ls 2>/dev/null || echo "No directories"
-        stat /srv/studio/infra-apps 2>/dev/null || echo "infra-apps does not exist"
-        echo "=== END DEBUG ==="
-      register: debug_after_docker
-      changed_when: false
-      tags: [debug]
-
-    - name: DEBUG - Display /srv/studio state after Docker started
-      debug:
-        msg: "{{ debug_after_docker.stdout_lines }}"
-      tags: [debug]
-
-    - name: Create shared Docker network for all services
+    - name: Create shared Docker network
       community.docker.docker_network:
         name: shared
         driver: bridge
         ipam_config:
           - subnet: "172.30.0.0/16"
-      become_user: "{{ deploy_user | default('deploy') }}"
+      # 使用 ignore_errors 防止网络已存在但参数微小差异导致的报错
+      ignore_errors: yes 
       tags: [network]
 
     # =====================================
-    # 调试：检查创建网络后的状态
+    # 8. 安装工具
     # =====================================
-    - name: DEBUG - Check /srv/studio after network creation
-      shell: |
-        echo "=== AFTER Network Creation ==="
-        ls -la /srv/studio 2>/dev/null || echo "/srv/studio does not exist"
-        find /srv/studio -type d -ls 2>/dev/null || echo "No directories"
-        stat /srv/studio/infra-apps 2>/dev/null || echo "infra-apps does not exist"
-        echo "=== END DEBUG ==="
-      register: debug_after_network
-      changed_when: false
-      tags: [debug]
-
-    - name: DEBUG - Display /srv/studio state after network creation
-      debug:
-        msg: "{{ debug_after_network.stdout_lines }}"
-      tags: [debug]
-
-    # =====================================
-    # 安装 docker-rollout 零停机部署工具
-    # =====================================
-    - name: Install docker-rollout for zero-downtime deployment
+    - name: Install docker-rollout
       include_tasks: ../tasks/install-docker-rollout.yml
-      tags: [docker-rollout, tools]
+      tags: [docker-rollout]
 
-    - name: 显示基础设施准备完成信息
+    - name: Info
       debug:
-        msg:
-          - "✅ Docker 基础设施准备完成"
-          - "共享网络: shared_network (172.30.0.0/16)"
-          - "零停机工具: docker rollout 已安装"
-          - ""
-          - "下一步: 部署独立服务（每个服务自动创建所需目录）"
-          - "  mise deploy-infra postgres"
-          - "  mise deploy-infra redis" 
-          - "  mise deploy-infra caddy"
-      tags: [info]
+        msg: 
+          - "✅ Docker 准备就绪"
+          - "数据目录: /data/docker"
+          - "Volumes 状态: {{ '已保留' if (reset_docker | bool) else '未变动' }}"

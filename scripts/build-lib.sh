@@ -153,6 +153,10 @@ build_and_push_image() {
 
   docker push "$image_name:$tag_latest"
   docker push "$image_name:$tag_versioned"
+
+  # 导出镜像标签供调用者使用
+  export IMAGE_TAG_VERSIONED="$image_name:$tag_versioned"
+  export IMAGE_TAG_LATEST="$image_name:$tag_latest"
 }
 
 # ===== 环境检测 =====

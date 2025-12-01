@@ -367,14 +367,16 @@ run = 'ssh -t deploy@49.13.31.185 "cd /srv/studio && exec bash -l"'
 
 # 用脚本创建初始用户
 [tasks.server-init-user]
-description = "Create deploy user on server"
+description = "Create deploy user on server(s)"
 usage = '''
-arg "<ip>"
+arg "<ip>" var=#true
 flag "-u --user <user>" help="admin user" default="root" env="ADMIN_USER"
 '''
 run = '''
-rsync -chazP ./scripts/create-init-user.sh ${usage_user?}@${usage_ip?}:
-ssh ${usage_user?}@${usage_ip?} 'bash create-init-user.sh'
+for ip in ${usage_ip?}; do
+  rsync -chazP ./scripts/create-init-user.sh ${usage_user?}@$ip:
+  ssh ${usage_user?}@$ip 'bash create-init-user.sh'
+done
 '''
 
 # 服务器初始化

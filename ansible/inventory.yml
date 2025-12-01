@@ -12,7 +12,7 @@ all:
     preview_servers:
       hosts:
         preview:
-          ansible_host: 49.13.31.185
+          ansible_host: 138.199.157.194
           ansible_user: deploy
           ansible_python_interpreter: /usr/bin/python3
       vars:

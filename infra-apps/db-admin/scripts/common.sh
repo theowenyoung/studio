@@ -258,18 +258,18 @@ create_database_with_app_user() {
 
   log "📦 Creating database: $db_name"
 
-  psql -v ON_ERROR_STOP=1 <<-EOSQL
-    DO \$\$
-    BEGIN
-        IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db_name') THEN
-            CREATE DATABASE $db_name OWNER app_user;
-            RAISE NOTICE 'Database $db_name created';
-        ELSE
-            RAISE NOTICE 'Database $db_name already exists';
-        END IF;
-    END
-    \$\$;
+  # Check if database exists (cannot use DO block for CREATE DATABASE)
+  local db_exists=$(psql -t -c "SELECT 1 FROM pg_database WHERE datname = '$db_name';")
+
+  if [ -z "$db_exists" ]; then
+    # Database doesn't exist, create it
+    psql -v ON_ERROR_STOP=1 <<-EOSQL
+      CREATE DATABASE $db_name OWNER app_user;
 EOSQL
+    log "Database $db_name created"
+  else
+    log "Database $db_name already exists"
+  fi
 
   log_success "Database $db_name ready!"
   log ""
@@ -333,18 +333,18 @@ EOSQL
   # Step 2: Create database
   log "📦 Creating database: $db_name"
 
-  psql -v ON_ERROR_STOP=1 <<-EOSQL
-    DO \$\$
-    BEGIN
-        IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db_name') THEN
-            CREATE DATABASE $db_name OWNER $user_name;
-            RAISE NOTICE 'Database $db_name created';
-        ELSE
-            RAISE NOTICE 'Database $db_name already exists';
-        END IF;
-    END
-    \$\$;
+  # Check if database exists (cannot use DO block for CREATE DATABASE)
+  local db_exists=$(psql -t -c "SELECT 1 FROM pg_database WHERE datname = '$db_name';")
+
+  if [ -z "$db_exists" ]; then
+    # Database doesn't exist, create it
+    psql -v ON_ERROR_STOP=1 <<-EOSQL
+      CREATE DATABASE $db_name OWNER $user_name;
 EOSQL
+    log "Database $db_name created"
+  else
+    log "Database $db_name already exists"
+  fi
 
   # Step 3: Set up permissions
   log "🔑 Setting up permissions"

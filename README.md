@@ -121,13 +121,13 @@ ansible-galaxy install -r ansible/requirements.yml
 #### 1. 初始化服务器
 
 ```bash
-# 第一步：创建 deploy 用户（在本地执行）
-# prod
-mr server-init-user <server-ip>
-# preview
-mr server-init-user <server-ip>
+# 第一步：在所有新服务器上创建 deploy 用户（在本地执行）
+mr server-init-user <server-ip> [...server-ip]
+mr server-init-user 138.199.157.194 5.78.126.18
 
-# 第二步：配置服务器环境（安全加固、Docker、数据盘挂载等）
+# 第二步：在 ansible/inventory.yml 中更新服务器列表
+
+# 第三步：配置服务器环境（安全加固、Docker、数据盘挂载等）
 mr server-init
 ```
 

@@ -35,7 +35,7 @@ else
 fi
 
 # ===== 4. 生成 docker-compose.yml =====
-export IMAGE_TAG="$IMAGE:$VERSION"
+export IMAGE_TAG="$IMAGE_TAG_VERSIONED"
 envsubst <"$SCRIPT_DIR/docker-compose.prod.yml" >"$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
 
 # ===== 5. 写入版本号 =====
