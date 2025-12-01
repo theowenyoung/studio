@@ -1,16 +1,11 @@
 ---
 # =====================================
-# Docker 环境和工具准备 - 修正版
+# Docker 环境和工具准备
 # =====================================
 - name: Setup Docker Environment and Tools
   hosts: all
   gather_facts: no
   become: yes
-  vars:
-    # 设置为 true 将会执行“核弹级”清理（只保留 volumes，清除镜像和容器）
-    # 建议默认 false，防止误删镜像导致重新拉取时间过长
-    # 运行时可通过 -e reset_docker=true 强制开启
-    reset_docker: true 
 
   tasks:
     # =====================================
@@ -21,9 +16,9 @@
       tags: [always]
 
     # =====================================
-    # 2. 停止 Docker (配置前必须停止)
+    # 2. 停止 Docker（如果在运行）
     # =====================================
-    - name: Stop Docker service
+    - name: Stop Docker service for configuration
       systemd:
         name: docker
         state: stopped
@@ -31,36 +26,7 @@
       tags: [docker-setup]
 
     # =====================================
-    # 3. 核心修复逻辑：安全清理旧数据
-    #    只保留 volumes，删除其他所有 Docker 内部数据
-    # =====================================
-    - name: HARD RESET - Clean Docker root but PRESERVE volumes
-      shell: |
-        echo "Performing Hard Reset of Docker Data..."
-        
-        # 确保目录存在
-        if [ -d "/data/docker" ]; then
-            # 1. 查找除了 'volumes' 以外的所有一级子目录并删除
-            # -mindepth 1: 不删除 /data/docker 本身
-            # -maxdepth 1: 只看第一层
-            # -not -name 'volumes': 排除 volumes 目录
-            find /data/docker -mindepth 1 -maxdepth 1 -type d -not -name 'volumes' -exec rm -rf '{}' +
-            
-            # 2. 删除所有非目录文件 (如之前的 daemon.json 或锁文件)
-            find /data/docker -mindepth 1 -maxdepth 1 -type f -delete
-            
-            echo "✅ Docker data wiped, volumes preserved."
-        else
-            echo "Directory /data/docker does not exist, skipping clean."
-        fi
-      # 触发条件：
-      # 1. 显式传入了 reset_docker=true
-      # 2. 或者检测到 overlay2 目录缺失/损坏（通过之前的错误推断，这里我们简单依赖变量）
-      when: reset_docker | bool
-      tags: [cleanup]
-
-    # =====================================
-    # 4. 配置 Docker
+    # 3. 配置 Docker
     # =====================================
     - name: Ensure Docker data directory exists
       file:
@@ -115,19 +81,7 @@
       tags: [docker-service]
 
     # =====================================
-    # 6. 常规清理 (Soft Prune)
-    #    即使不进行 Hard Reset，也清理悬空资源
-    # =====================================
-    - name: Prune Docker system (Soft Clean)
-      shell: |
-        # 清理悬空的镜像、停止的容器、未使用的网络
-        # 注意：这里不加 --volumes，确保数据绝对安全
-        docker system prune -a -f
-      when: not (reset_docker | bool)
-      tags: [cleanup]
-
-    # =====================================
-    # 7. 网络配置
+    # 6. 网络配置
     # =====================================
     - name: Create shared Docker network
       community.docker.docker_network:
@@ -148,7 +102,7 @@
 
     - name: Info
       debug:
-        msg: 
+        msg:
           - "✅ Docker 准备就绪"
           - "数据目录: /data/docker"
-          - "Volumes 状态: {{ '已保留' if (reset_docker | bool) else '未变动' }}"
+          - "共享网络: shared (172.30.0.0/16)"

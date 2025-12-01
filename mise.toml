@@ -455,6 +455,20 @@ description = "Resize Hetzner volume on all servers (expand filesystem)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l all"
 alias = "resize"
 
+# Docker 数据清理（系统重建前备份）
+[tasks.server-clean-docker-prod]
+description = "Clean Docker data on prod server (move to .old backup before rebuild)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/clean-docker.yml -l prod"
+
+[tasks.server-clean-docker-preview]
+description = "Clean Docker data on preview server (move to .old backup before rebuild)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/clean-docker.yml -l preview"
+
+[tasks.server-clean-docker-all]
+description = "Clean Docker data on all servers (move to .old backup before rebuild)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/clean-docker.yml -l all"
+alias = "clean-docker"
+
 # Note: 其他服务器运维任务（查看日志、恢复数据库、查看备份等）
 # 请 SSH 到服务器后使用 server-mise.toml 中定义的任务
 # 例如：mise ssh-studio 然后 mise run db-restore-local

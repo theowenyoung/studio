@@ -1,0 +1,70 @@
+---
+# 清理 Docker 数据目录（移动到 .old 备份）
+# 使用场景：系统重建前备份 Docker 数据
+- name: Clean Docker Data Directory
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    docker_data_root: /data/docker
+
+  tasks:
+    - name: Check if Docker is running
+      systemd:
+        name: docker
+      register: docker_service
+      ignore_errors: yes
+
+    - name: Stop Docker service
+      systemd:
+        name: docker
+        state: stopped
+      when: docker_service.status.ActiveState == "active"
+      tags: [docker-stop]
+
+    - name: Stop Docker socket
+      systemd:
+        name: docker.socket
+        state: stopped
+      ignore_errors: yes
+      tags: [docker-stop]
+
+    - name: Check if Docker data directory exists
+      stat:
+        path: "{{ docker_data_root }}"
+      register: docker_data_dir
+
+    - name: Create backup directory name with timestamp
+      set_fact:
+        backup_path: "{{ docker_data_root }}.old-{{ ansible_date_time.iso8601_basic_short }}"
+      when: docker_data_dir.stat.exists
+
+    - name: Move Docker data directory to backup
+      command: mv "{{ docker_data_root }}" "{{ backup_path }}"
+      when: docker_data_dir.stat.exists
+      tags: [backup]
+
+    - name: Display backup location
+      debug:
+        msg:
+          - "✅ Docker 数据已备份"
+          - "原路径: {{ docker_data_root }}"
+          - "备份路径: {{ backup_path }}"
+          - ""
+          - "⚠️  Docker 服务已停止"
+          - "下一步："
+          - "  1. 执行系统重建操作"
+          - "  2. 运行 mise run server-init 初始化服务器"
+          - ""
+          - "💡 如需恢复数据："
+          - "  mv {{ backup_path }} {{ docker_data_root }}"
+      when: docker_data_dir.stat.exists
+
+    - name: Show message if directory doesn't exist
+      debug:
+        msg:
+          - "ℹ️  Docker 数据目录不存在"
+          - "路径: {{ docker_data_root }}"
+          - "无需备份"
+      when: not docker_data_dir.stat.exists
