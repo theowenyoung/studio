@@ -193,12 +193,16 @@ dir = "external-apps/meilisearch"
 [tasks.dev-env]
 description = "Fetch all development environment variables"
 alias = "env"
-depends = ["dev-env-postgres", "dev-env-redis", "dev-env-hono", "dev-env-backup", "dev-env-admin", "dev-env-meilisearch","dev-env-api"]
+depends = ["dev-env-postgres", "dev-env-redis", "dev-env-db-admin","dev-env-hono", "dev-env-backup", "dev-env-admin", "dev-env-meilisearch","dev-env-api"]
 
 [tasks.dev-env-postgres]
 description = "Fetch PostgreSQL dev environment variables"
 run = '../../rust-packages/psenv/target/release/psenv -t .env.example -p "/studio-dev/" -o .env'
 dir = "infra-apps/postgres"
+
+[tasks.dev-env-db-admin]
+run = '../../rust-packages/psenv/target/release/psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/db-admin"
 
 [tasks.dev-env-redis]
 description = "Fetch Redis dev environment variables"
@@ -244,7 +248,7 @@ alias = "db"
 run = 'docker compose exec postgres psql -U postgres'
 dir = "infra-apps/postgres"
 
-[tasks.db-init]
+[tasks.dev-db-admin]
 description = "Initialize database (run admin migrations)"
 run = "docker compose run --rm db-admin"
 dir = "infra-apps/db-admin"

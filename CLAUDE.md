@@ -54,7 +54,7 @@ studio-new/
 mise run init              # Create Docker network
 mise run env               # Fetch .env files from AWS Parameter Store
 mise run up                # Start postgres, redis, caddy, meilisearch
-mise run db-init           # Initialize database users and permissions
+mise run dev-db-admin           # Initialize database users and permissions
 mise run db-migrate-hono   # Run application migrations
 
 # Start development servers

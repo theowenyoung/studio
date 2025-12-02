@@ -49,7 +49,7 @@ echo "✅ All PostgreSQL data has been deleted"
 echo ""
 echo "To reinitialize:"
 echo "  cd /srv/studio/infra-apps/postgres && docker compose up -d"
-echo "  mr db-init  # Run database initialization"
+echo "  mr dev-db-admin  # Run database initialization"
 """
 
 # ==================== Application Management ====================

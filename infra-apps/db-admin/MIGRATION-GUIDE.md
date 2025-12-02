@@ -164,7 +164,7 @@ sed -i '' 's/hono_demo/myapp/g' migrations/004-create-myapp-db.sh
 chmod +x migrations/004-create-myapp-db.sh
 
 # 4. 运行迁移
-mise run db-init
+mise run dev-db-admin
 ```
 
 ### 方式 2: 使用独立用户
@@ -187,7 +187,7 @@ POSTGRES_MYAPP_READONLY_PASSWORD=$(openssl rand -base64 32)
 EOF
 
 # 5. 运行迁移
-mise run db-init
+mise run dev-db-admin
 ```
 
 ---
@@ -214,7 +214,7 @@ mise run db-init
 
 ```bash
 # 本地开发环境
-mise run db-init
+mise run dev-db-admin
 
 # 或直接使用 docker compose
 cd infra-apps/db-admin
@@ -292,7 +292,7 @@ psenv -t .env.example -p "/studio-prod/" -o .env
 
 ```bash
 # 在本地测试
-mise run db-init
+mise run dev-db-admin
 
 # 验证数据库创建
 mise run db-connect

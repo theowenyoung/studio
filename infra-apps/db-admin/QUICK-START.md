@@ -43,7 +43,7 @@ chmod +x migrations/004-create-myapp-db.sh
 
 4. **运行迁移**：
 ```bash
-mise run db-init
+mise run dev-db-admin
 ```
 
 ### 脚本结构
@@ -130,7 +130,7 @@ EOF
 
 5. **运行迁移**：
 ```bash
-mise run db-init
+mise run dev-db-admin
 ```
 
 ### 脚本结构

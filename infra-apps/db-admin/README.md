@@ -184,7 +184,7 @@ DATABASE_URL=postgresql://myapp_readonly:<password>@<host>:5432/myapp
 
 ```bash
 # 本地开发
-mise run db-init
+mise run dev-db-admin
 
 # 生产部署
 mise run deploy-db-admin

@@ -59,7 +59,7 @@ mr up
 
 # 创建数据库和用户
 
-mr db-init
+mr dev-db-admin
 
 # 首次启动 hono 应用, 生成数据库表
 
@@ -142,12 +142,14 @@ mr deploy-postgres
 mr deploy-redis
 mr deploy-caddy
 mr deploy-backup
-mr deploy-infra-db-admin
+mr deploy-db-admin
 ```
 
 #### 2.5 是否从以前的数据库中恢复?
 
 ```
+# 创建数据库
+mr deploy-db-admin
 # ssh 登陆服务器
 mr ssh
 
@@ -158,6 +160,8 @@ mr db-restore-s3
 #### 3. 部署应用
 
 ```bash
+# 是否已经创建数据库？如果没有，执行下面的命令
+mr deploy-db-admin
 # 后端应用（Docker 容器 + 零停机）
 mr deploy-hono
 

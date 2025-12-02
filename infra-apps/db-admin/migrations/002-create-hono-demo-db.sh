@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # ==========================================
 # Configuration - Modify these variables
 # ==========================================
-DB_NAME="hono_demo"
+DB_NAME="${HONO_DEMO_DB_NAME:-hono_demo}"
 
 # ==========================================
 # Create Database with Shared app_user
