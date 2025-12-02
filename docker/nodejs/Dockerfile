@@ -46,6 +46,9 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# 安装 bash 和 postgresql-client（用于迁移脚本）
+RUN apk add --no-cache bash postgresql-client
+
 # 启用 pnpm（用于运行迁移等任务）
 ENV PNPM_HOME=/usr/local/share/pnpm
 ENV PATH="${PNPM_HOME}:${PATH}"
@@ -57,6 +60,10 @@ RUN addgroup --system --gid 1001 nodejs \
 
 # 从 builder 导入"已裁剪的"产物
 COPY --from=builder --chown=appuser:nodejs /out/ /app/
+
+# 复制 scripts 目录到根目录（供迁移脚本使用）
+# package.json 中的迁移命令使用 ../../scripts，从 /app 算起即 /scripts
+COPY --from=builder --chown=appuser:nodejs /repo/scripts /scripts
 
 # 暴露端口
 ARG EXPOSE_PORT=3000

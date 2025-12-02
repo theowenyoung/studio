@@ -95,12 +95,38 @@ mise run buildjs hono-demo migrate:create add-users-table
 
 ### Environment Variables
 
-- **Development**: Use `psenv` tool (Rust) to sync from AWS Parameter Store
-  - Template: `.env.example` in each app directory
-  - Path prefix: `/studio-dev/` for dev, `/studio-prod/` for production
-  - Run: `mise run env` to fetch all, or `mise run dev-env-hono` for specific app
+本项目使用 **两阶段模板渲染** 来管理环境变量配置。详细文档请参考：[ENV_TEMPLATE_GUIDE.md](docs/ENV_TEMPLATE_GUIDE.md)
 
-- **Production**: Automatically fetched during build via `build.sh` scripts
+**核心概念：**
+- **源变量**: 从 AWS Parameter Store、环境变量或文件默认值获取
+- **计算变量**: 使用 `${VAR:-default}` 语法在运行时动态组合
+- **上下文变量**: `build-lib.sh` 根据环境自动注入 `CTX_*` 变量
+
+**快速使用：**
+```bash
+# 本地开发 - 自动使用 localhost
+export POSTGRES_USER="app_user"
+export POSTGRES_PASSWORD="dev"
+mise run dev-env-hono  # 生成 js-apps/hono-demo/.env
+
+# Preview/Prod - 从 AWS 获取凭证，自动拼接分支后缀
+mise run env            # 生成所有应用的 .env
+```
+
+**配置文件示例：** (`js-apps/*/.env.example`)
+```bash
+# 源变量（从 AWS 或环境变量获取）
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_DB_NAME=
+APP_SUBDOMAIN=hono-demo
+
+# 计算变量（模板渲染）
+DB_HOST=${CTX_PG_HOST:-localhost}
+POSTGRES_DB=${POSTGRES_DB_NAME}${CTX_DB_SUFFIX:-}
+APP_URL=https://${APP_SUBDOMAIN}${CTX_DNS_SUFFIX:-}.${CTX_ROOT_DOMAIN:-studio.localhost}
+DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:5432/${POSTGRES_DB}
+```
 
 ## Deployment
 

@@ -33,13 +33,16 @@ else
     echo ""
     echo "🌐 Domains (if deployed):"
     for service in "${SERVICES[@]}"; do
-        domain=$(get_domain "$service")
+        # Generate domain: branch-service-preview.owenyoung.com
+        domain="${BRANCH_CLEAN}-${service}-preview.owenyoung.com"
         echo "   • https://$domain"
     done
     echo ""
     echo "💾 Database names:"
     for service in "${SERVICES[@]}"; do
-        db_name=$(get_database_name "$service")
+        # Generate database name: service_branch (e.g., hono_demo_feat_auth)
+        db_base=$(echo "$service" | tr '-' '_')
+        db_name="${db_base}_${BRANCH_CLEAN//-/_}"
         echo "   • $db_name"
     done
     echo ""

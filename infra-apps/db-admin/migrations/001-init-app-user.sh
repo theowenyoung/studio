@@ -22,40 +22,42 @@ if [ -z "${POSTGRES_APP_USER_PASSWORD}" ]; then
     exit 1
 fi
 
+# Default to 'app_user' if not specified
+APP_USER="${POSTGRES_APP_USER:-app_user}"
 APP_USER_PASSWORD="${POSTGRES_APP_USER_PASSWORD}"
 
 # ==========================================
 # Create Shared Application User
 # ==========================================
 
-log "📦 Creating shared application user: app_user"
+log "📦 Creating shared application user: $APP_USER"
 
 psql -v ON_ERROR_STOP=1 <<-EOSQL
     -- Create user (no CREATEDB privilege)
     DO \$\$
     BEGIN
-        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'app_user') THEN
-            CREATE USER app_user WITH PASSWORD '$APP_USER_PASSWORD';
-            RAISE NOTICE 'User app_user created';
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$APP_USER') THEN
+            CREATE USER $APP_USER WITH PASSWORD '$APP_USER_PASSWORD';
+            RAISE NOTICE 'User $APP_USER created';
         ELSE
-            RAISE NOTICE 'User app_user already exists';
+            RAISE NOTICE 'User $APP_USER already exists';
         END IF;
     END
     \$\$;
 
-    -- Grant app_user to postgres (allows postgres to create databases owned by app_user)
-    GRANT app_user TO postgres;
+    -- Grant $APP_USER to postgres (allows postgres to create databases owned by $APP_USER)
+    GRANT $APP_USER TO postgres;
 EOSQL
 
 log_success "Database infrastructure ready!"
 log ""
 log "📋 Summary:"
-log "   User:     app_user (no CREATEDB privilege)"
+log "   User:     $APP_USER (no CREATEDB privilege)"
 log "   Password: from POSTGRES_APP_USER_PASSWORD"
 log "   Note:     Databases created by postgres automatically"
 log ""
 log "💡 Usage:"
-log "   DATABASE_URL=postgresql://app_user:<password>@<host>:5432/<db_name>"
+log "   DATABASE_URL=postgresql://$APP_USER:<password>@<host>:5432/<db_name>"
 log ""
 log "🚀 Databases created automatically during deployment"
 log ""

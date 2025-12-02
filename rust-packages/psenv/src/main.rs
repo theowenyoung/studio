@@ -7,11 +7,13 @@ mod aws_client;
 mod env_handler;
 pub mod secret_masker;
 mod template_parser;
+mod template_renderer;
 
 use aws_client::AwsClient;
 use env_handler::{EnvHandler, Strategy};
 use secret_masker::SecretMasker;
-use template_parser::TemplateParser;
+use template_parser::{EnvEntry, TemplateParser};
+use template_renderer::TemplateRenderer;
 
 #[derive(Parser)]
 #[command(name = "psenv")]
@@ -114,59 +116,164 @@ async fn run(cli: Cli) -> Result<()> {
 
     debug!("Ignore keys: {:?}", ignore_keys);
 
-    // Parse template file
+    // Parse template file to get entries with values
     let parser = TemplateParser::new();
-    let keys = parser.parse_template(&cli.template)
+    let entries = parser.parse_template(&cli.template)
         .with_context(|| format!("Failed to parse template file: {}", cli.template))?;
 
-    info!("Found {} keys in template", keys.len());
+    info!("Found {} entries in template", entries.len());
 
     // Filter out ignored keys
-    let filtered_keys: Vec<String> = keys.into_iter()
-        .filter(|key| !ignore_keys.contains(key))
+    let filtered_entries: Vec<EnvEntry> = entries.into_iter()
+        .filter(|entry| !ignore_keys.contains(&entry.key))
         .collect();
 
-    info!("Processing {} keys after filtering", filtered_keys.len());
+    info!("Processing {} entries after filtering", filtered_entries.len());
 
     // Initialize AWS client
     let aws_client = AwsClient::new(cli.region.as_deref(), cli.profile.as_deref()).await
         .with_context(|| "Failed to initialize AWS client")?;
 
-    // Fetch parameters from AWS Parameter Store
-    let mut values = HashMap::new();
+    // Initialize template renderer
+    let renderer = TemplateRenderer::new();
+
+    // === PHASE 1: Resolve Raw Variables (Source Variables) ===
+    info!("Phase 1: Resolving raw variables...");
+    let mut context: HashMap<String, String> = HashMap::new();
     let mut missing_keys = Vec::new();
 
-    for key in &filtered_keys {
-        let param_path = format!("{}{}", cli.prefix, key);
-        debug!("Fetching parameter: {}", param_path);
+    for entry in &filtered_entries {
+        // Check if this is a raw variable (no template syntax)
+        if !renderer.contains_variables(&entry.raw_value) {
+            debug!("Processing raw variable: {}", entry.key);
 
-        match aws_client.get_parameter(&param_path).await {
-            Ok(Some(value)) => {
-                values.insert(key.clone(), value);
-                debug!("Retrieved value for key: {}", key);
+            // Priority: 1. Shell Env -> 2. AWS Parameter Store -> 3. .env.example literal
+            let value = if let Ok(env_val) = std::env::var(&entry.key) {
+                debug!("  ✓ Found in shell environment");
+                env_val
+            } else {
+                let param_path = format!("{}{}", cli.prefix, entry.key);
+                match aws_client.get_parameter(&param_path).await {
+                    Ok(Some(aws_val)) => {
+                        debug!("  ✓ Found in AWS Parameter Store");
+                        aws_val
+                    }
+                    Ok(None) => {
+                        // Not in AWS, use literal from .env.example
+                        if !entry.raw_value.is_empty() {
+                            debug!("  ✓ Using literal default from template");
+                            entry.raw_value.clone()
+                        } else {
+                            debug!("  ✗ Not found in any source");
+                            missing_keys.push(entry.key.clone());
+                            continue;
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to fetch {}: {}. Trying literal default.", param_path, e);
+                        if !entry.raw_value.is_empty() {
+                            entry.raw_value.clone()
+                        } else {
+                            missing_keys.push(entry.key.clone());
+                            continue;
+                        }
+                    }
+                }
+            };
+
+            context.insert(entry.key.clone(), value);
+        }
+    }
+
+    info!("Phase 1 complete: {} raw variables resolved", context.len());
+
+    // Also include all CTX_* environment variables (infrastructure context)
+    for (key, value) in std::env::vars() {
+        if key.starts_with("CTX_") {
+            debug!("Including context variable: {}", key);
+            context.insert(key, value);
+        }
+    }
+
+    // === PHASE 2: Render Computed Variables (Template Variables) ===
+    // Use iterative rendering to handle dependencies between computed variables
+    info!("Phase 2: Rendering computed variables...");
+    let mut unrendered: Vec<&EnvEntry> = filtered_entries.iter()
+        .filter(|e| renderer.contains_variables(&e.raw_value))
+        .collect();
+
+    let max_iterations = 10;
+    let mut iteration = 0;
+
+    while !unrendered.is_empty() && iteration < max_iterations {
+        iteration += 1;
+        debug!("Render iteration {}: {} variables remaining", iteration, unrendered.len());
+
+        let mut newly_rendered = Vec::new();
+
+        for (idx, entry) in unrendered.iter().enumerate() {
+            match renderer.render(&entry.raw_value, &context) {
+                Ok(rendered) => {
+                    debug!("  ✓ {} = {}", entry.key, rendered);
+                    context.insert(entry.key.clone(), rendered);
+                    newly_rendered.push(idx);
+                }
+                Err(_) => {
+                    // Can't render yet, might depend on other variables
+                    debug!("  ⏸ {} (waiting for dependencies)", entry.key);
+                }
             }
-            Ok(None) => {
-                warn!("Parameter not found: {}", param_path);
-                missing_keys.push(key.clone());
-            }
+        }
+
+        // Remove successfully rendered entries
+        if newly_rendered.is_empty() {
+            // No progress made, remaining variables have unresolvable dependencies
+            break;
+        }
+
+        // Remove in reverse order to maintain indices
+        for &idx in newly_rendered.iter().rev() {
+            unrendered.remove(idx);
+        }
+    }
+
+    // Check for any remaining unrendered variables
+    let mut render_errors = Vec::new();
+    for entry in unrendered {
+        match renderer.render(&entry.raw_value, &context) {
             Err(e) => {
-                error!("Failed to retrieve parameter {}: {}", param_path, e);
-                missing_keys.push(key.clone());
+                error!("  ✗ Failed to render {}: {}", entry.key, e);
+                render_errors.push(format!("{}: {}", entry.key, e));
+            }
+            Ok(_) => {
+                // Shouldn't happen, but just in case
+                warn!("  ⚠ Variable {} was renderable but not rendered in iterations", entry.key);
             }
         }
     }
 
-    // Check if all required parameters are present
-    if cli.require_all && !missing_keys.is_empty() {
-        return Err(PsenvError::RequiredParameterMissing(
-            format!("Missing required parameters: {}", missing_keys.join(", "))
-        ).into());
-    }
+    info!("Phase 2 complete: {} total variables in context (rendered in {} iterations)",
+          context.len(), iteration);
 
-    info!("Retrieved {} out of {} parameters", values.len(), filtered_keys.len());
-
-    if !missing_keys.is_empty() {
-        warn!("Missing parameters: {}", missing_keys.join(", "));
+    // Check for errors
+    if cli.require_all {
+        if !missing_keys.is_empty() {
+            return Err(PsenvError::RequiredParameterMissing(
+                format!("Missing required raw variables: {}", missing_keys.join(", "))
+            ).into());
+        }
+        if !render_errors.is_empty() {
+            return Err(PsenvError::RequiredParameterMissing(
+                format!("Failed to render computed variables:\n{}", render_errors.join("\n"))
+            ).into());
+        }
+    } else {
+        if !missing_keys.is_empty() {
+            warn!("Missing raw variables: {}", missing_keys.join(", "));
+        }
+        if !render_errors.is_empty() {
+            warn!("Failed to render some computed variables:\n{}", render_errors.join("\n"));
+        }
     }
 
     // Handle .env file generation
@@ -175,16 +282,16 @@ async fn run(cli: Cli) -> Result<()> {
     if cli.dry_run {
         info!("Dry run mode - would write to: {}", cli.output);
         let masker = SecretMasker::new();
-        let mut sorted_keys: Vec<&String> = values.keys().collect();
+        let mut sorted_keys: Vec<&String> = context.keys().collect();
         sorted_keys.sort();
 
         for key in sorted_keys {
-            if let Some(value) = values.get(key) {
+            if let Some(value) = context.get(key) {
                 println!("{}", masker.format_output(key, value, cli.show_secrets));
             }
         }
     } else {
-        env_handler.handle_env_file(&cli.output, &values, cli.strategy)
+        env_handler.handle_env_file(&cli.output, &context, cli.strategy)
             .with_context(|| format!("Failed to handle .env file: {}", cli.output))?;
 
         info!("Successfully updated {}", cli.output);

@@ -14,7 +14,7 @@ get_version() {
 # ===== ECR 登录 =====
 ecr_login() {
   echo "🔐 Logging into ECR..."
-  aws ecr get-login-password --region "$ECR_REGION" | \
+  aws ecr get-login-password --region "$ECR_REGION" |
     docker login --username AWS --password-stdin "$ECR_REGISTRY"
 }
 
@@ -22,7 +22,8 @@ ecr_login() {
 apply_ecr_lifecycle_policy() {
   local repo_name="$1"
 
-  local policy=$(cat <<'EOF'
+  local policy=$(
+    cat <<'EOF'
 {
   "rules": [
     {
@@ -68,7 +69,7 @@ apply_ecr_lifecycle_policy() {
   ]
 }
 EOF
-)
+  )
 
   if aws ecr put-lifecycle-policy \
     --repository-name "$repo_name" \
@@ -160,69 +161,75 @@ build_and_push_image() {
 }
 
 # ===== 环境检测 =====
+# 注入基础设施上下文变量 (CTX_*) 供 psenv 模板渲染使用
 detect_environment() {
-    local current_branch=$(git rev-parse --abbrev-ref HEAD)
-    export CURRENT_BRANCH="$current_branch"
-    export BRANCH_CLEAN=$(echo "$current_branch" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-30)
-    export DEPLOY_TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+  local current_branch=$(git rev-parse --abbrev-ref HEAD)
+  export CURRENT_BRANCH="$current_branch"
 
-    if [ "$current_branch" = "main" ]; then
-        export DEPLOY_ENV="prod"
-        export ANSIBLE_TARGET="prod"
-    else
-        export DEPLOY_ENV="preview"
-        export ANSIBLE_TARGET="preview"
-    fi
-}
+  # 清洗分支名，用于生成后缀
+  export BRANCH_CLEAN=$(echo "$current_branch" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-30)
+  export DEPLOY_TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
 
-# ===== 生成服务名（带分支后缀）=====
-get_service_name() {
-    local base_service=$1
-    if [ "$DEPLOY_ENV" = "preview" ]; then
-        echo "${base_service}-${BRANCH_CLEAN}"
-    else
-        echo "${base_service}"
-    fi
-}
+  # 服务名：从当前目录名推断（monorepo 约定）
+  export CTX_SERVICE_NAME=$(basename "$PWD")
 
-# ===== 生成数据库名 =====
-get_database_name() {
-    local base_service=$1
-    local db_base=$(echo "$base_service" | tr '-' '_')
-    if [ "$DEPLOY_ENV" = "preview" ]; then
-        echo "${db_base}_${BRANCH_CLEAN//-/_}"
-    else
-        echo "${db_base}"
-    fi
-}
+  if [ "$current_branch" = "main" ]; then
+    # === Production Environment ===
+    export DEPLOY_ENV="prod"
+    export ANSIBLE_TARGET="prod"
 
-# ===== 生成域名 =====
-get_domain() {
-    local base_service=$1
-    if [ "$DEPLOY_ENV" = "preview" ]; then
-        # 格式：branch-service-preview.owenyoung.com
-        echo "${BRANCH_CLEAN}-${base_service}-preview.owenyoung.com"
-    else
-        echo "${base_service}.owenyoung.com"
-    fi
+    # 生产环境上下文
+    # 注意：不需要后缀，域名等配置通常在 AWS Parameter Store 中
+    export CTX_DB_SUFFIX=""
+    export CTX_DNS_SUFFIX=""
+    export CTX_ROOT_DOMAIN="owenyoung.com"
+
+    export CTX_PG_HOST="postgres"
+    export CTX_REDIS_HOST="redis"
+  else
+    # === Preview Environment ===
+    export DEPLOY_ENV="preview"
+    export ANSIBLE_TARGET="preview"
+
+    # 预览环境上下文
+    # 1. 数据库后缀 (下划线风格): _feat_auth
+    export CTX_DB_SUFFIX="_${BRANCH_CLEAN//-/_}"
+
+    # 2. 域名后缀 (中划线风格): -feat-auth
+    export CTX_DNS_SUFFIX="-${BRANCH_CLEAN}"
+
+    # 3. 基础设施 Host (Docker Service Name)
+    export CTX_PG_HOST="postgres"
+    export CTX_REDIS_HOST="redis"
+
+    # 4. 根域名
+    export CTX_ROOT_DOMAIN="preview.owenyoung.com"
+  fi
+
+  echo "🔧 Environment: $DEPLOY_ENV"
+  echo "🌳 Branch: $current_branch (clean: $BRANCH_CLEAN)"
+  echo "📦 Service: $CTX_SERVICE_NAME"
+  if [ "$DEPLOY_ENV" = "preview" ]; then
+    echo "📊 Context: DB_SUFFIX=$CTX_DB_SUFFIX, DNS_SUFFIX=$CTX_DNS_SUFFIX"
+  fi
 }
 
 # ===== 生成镜像标签 =====
 get_image_tag() {
-    local tag_type=$1  # "latest" or "versioned"
+  local tag_type=$1 # "latest" or "versioned"
 
-    if [ "$DEPLOY_ENV" = "preview" ]; then
-        if [ "$tag_type" = "latest" ]; then
-            echo "preview-${BRANCH_CLEAN}"
-        else
-            echo "preview-${BRANCH_CLEAN}-${DEPLOY_TIMESTAMP}"
-        fi
+  if [ "$DEPLOY_ENV" = "preview" ]; then
+    if [ "$tag_type" = "latest" ]; then
+      echo "preview-${BRANCH_CLEAN}"
     else
-        # 生产环境加 prod- 前缀
-        if [ "$tag_type" = "latest" ]; then
-            echo "prod-latest"
-        else
-            echo "prod-${DEPLOY_TIMESTAMP}"
-        fi
+      echo "preview-${BRANCH_CLEAN}-${DEPLOY_TIMESTAMP}"
     fi
+  else
+    # 生产环境加 prod- 前缀
+    if [ "$tag_type" = "latest" ]; then
+      echo "prod-latest"
+    else
+      echo "prod-${DEPLOY_TIMESTAMP}"
+    fi
+  fi
 }

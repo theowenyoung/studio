@@ -86,7 +86,9 @@ else
         echo "📊 Databases to delete:"
         SERVICES=("hono-demo" "blog" "storefront" "proxy")
         for service in "${SERVICES[@]}"; do
-            db_name=$(get_database_name "$service")
+            # Generate database name: service_branch (e.g., hono_demo_feat_auth)
+            db_base=$(echo "$service" | tr '-' '_')
+            db_name="${db_base}_${BRANCH_CLEAN//-/_}"
             echo "   docker exec postgres psql -U postgres -c \"DROP DATABASE IF EXISTS $db_name;\""
         done
         echo ""

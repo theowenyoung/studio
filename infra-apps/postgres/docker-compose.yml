@@ -11,7 +11,6 @@ services:
     volumes:
       - ./src/initdb.d:/docker-entrypoint-initdb.d:ro
       - ./src/config:/etc/postgresql:ro
-      - ../db-admin/migrations:/docker-entrypoint-initdb.d/db-admin-migrations:ro
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]

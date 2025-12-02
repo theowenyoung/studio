@@ -250,6 +250,7 @@ EOSQL
 # Usage: create_database_with_app_user DB_NAME
 create_database_with_app_user() {
   local db_name="$1"
+  local app_user="${POSTGRES_APP_USER:-app_user}"
 
   if [ -z "$db_name" ]; then
     log_error "Database name is required"
@@ -264,7 +265,7 @@ create_database_with_app_user() {
   if [ -z "$db_exists" ]; then
     # Database doesn't exist, create it
     psql -v ON_ERROR_STOP=1 <<-EOSQL
-      CREATE DATABASE $db_name OWNER app_user;
+      CREATE DATABASE $db_name OWNER $app_user;
 EOSQL
     log "Database $db_name created"
   else
@@ -275,10 +276,10 @@ EOSQL
   log ""
   log "📋 Summary:"
   log "   Database: $db_name"
-  log "   Owner:    app_user (shared user)"
+  log "   Owner:    $app_user (shared user)"
   log ""
   log "💡 Usage:"
-  log "   DATABASE_URL=postgresql://app_user:<password>@<host>:5432/$db_name"
+  log "   DATABASE_URL=postgresql://$app_user:<password>@<host>:5432/$db_name"
   log ""
 }
 
