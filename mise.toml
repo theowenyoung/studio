@@ -461,22 +461,26 @@ done
 # 服务器初始化 (显式指定目标 - 极度危险，必须手动确认)
 # 规则: 初始化操作太危险且频率极低，必须显式指定目标，不自动检测
 [tasks.server-init]
-description = "Initialize all servers (prod + preview) - DANGEROUS"
-depends = ["server-init-prod", "server-init-preview"]
+description = "Initialize all servers (prod + preview) in parallel - DANGEROUS"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true"
 
 [tasks.server-init-prod]
-description = "Initialize prod server (security, docker, directories, mise, aliases)"
+description = "Initialize prod server only (security, docker, directories, mise, aliases)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l prod"
 
 [tasks.server-init-preview]
-description = "Initialize preview server (security, docker, directories, mise, aliases)"
+description = "Initialize preview server only (security, docker, directories, mise, aliases)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l preview"
 
-# 服务器配置更新 (严格分支绑定)
+# 服务器配置更新 (严格分支绑定，跳过系统更新)
 [tasks.server-update]
-description = "Update server configuration (auto-detect target: main→prod, other→preview)"
+description = "Update server configuration without system update (auto-detect target)"
 run = "bash scripts/server-operation.sh update init-server.yml"
 
+# 系统包更新 (单独执行，耗时较长)
+[tasks.server-apt-upgrade]
+description = "Run apt upgrade on server (slow, auto-detect target)"
+run = "bash scripts/server-operation.sh apt-upgrade init-server.yml force_system_update=true"
 
 # 同步服务器配置 (严格分支绑定)
 [tasks.sync-config]

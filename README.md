@@ -133,8 +133,10 @@ mr server-init
 
 #### 2. 部署基础设施
 
+> 注意： 在 main 分支支持将会部署生产服务器，在其他分支执行将会部署 preview 服务器，需要分别执行。
+
 ```bash
-# 一次性部署所有基础设施（postgres, redis, caddy, backup, 数据库）
+# 一次性部署所有基础设施（postgres, redis, caddy, backup）
 mr deploy-infra
 
 # 或分别部署
@@ -142,14 +144,17 @@ mr deploy-postgres
 mr deploy-redis
 mr deploy-caddy
 mr deploy-backup
+```
+
+#### 2.1 创建所有需要的数据库
+
+```
 mr deploy-db-admin
 ```
 
 #### 2.5 是否从以前的数据库中恢复?
 
 ```
-# 创建数据库
-mr deploy-db-admin
 # ssh 登陆服务器
 mr ssh
 
