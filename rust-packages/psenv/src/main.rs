@@ -187,14 +187,6 @@ async fn run(cli: Cli) -> Result<()> {
 
     info!("Phase 1 complete: {} raw variables resolved", context.len());
 
-    // Also include all CTX_* environment variables (infrastructure context)
-    for (key, value) in std::env::vars() {
-        if key.starts_with("CTX_") {
-            debug!("Including context variable: {}", key);
-            context.insert(key, value);
-        }
-    }
-
     // === PHASE 2: Render Computed Variables (Template Variables) ===
     // Use iterative rendering to handle dependencies between computed variables
     info!("Phase 2: Rendering computed variables...");

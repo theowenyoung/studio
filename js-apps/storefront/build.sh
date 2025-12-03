@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
+# 检测环境（必须在开头调用）
+detect_environment
+
 SERVICE_NAME="storefront"
 APP_PATH="js-apps/storefront"
 VERSION="$(get_version)"

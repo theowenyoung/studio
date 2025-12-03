@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
+# 检测环境（必须在开头调用）
+detect_environment
+
 SERVICE_NAME="hono-demo"
 APP_PATH="js-apps/hono-demo"
 START_CMD="node dist/server/index.js"
@@ -27,7 +30,7 @@ mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 
 # ===== 3. 获取运行时环境变量 =====
 echo "🔐 Fetching environment variables from AWS Parameter Store..."
-psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
+psenv -t "$SCRIPT_DIR/.env.example" -p "$AWS_PARAM_PATH" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 
 # ===== 4. 生成 docker-compose.yml =====
 export IMAGE_TAG="$IMAGE_TAG_VERSIONED"

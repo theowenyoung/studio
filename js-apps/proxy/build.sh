@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
+# 检测环境（必须在开头调用）
+detect_environment
+
 SERVICE_NAME="proxy"
 APP_PATH="js-apps/proxy"
 START_CMD="node src/index.mjs"
@@ -29,7 +32,7 @@ mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 # ===== 3. 获取运行时环境变量 =====
 if [ -f "$SCRIPT_DIR/.env.example" ]; then
   echo "🔐 Fetching environment variables from AWS Parameter Store..."
-  psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env" || touch "$SCRIPT_DIR/$DEPLOY_DIST/.env"
+  psenv -t "$SCRIPT_DIR/.env.example" -p "$AWS_PARAM_PATH" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env" || touch "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 else
   touch "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 fi

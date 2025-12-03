@@ -39,16 +39,20 @@ impl TemplateRenderer {
             rendered.push_str(&template[last_index..full_match.start()]);
 
             // Resolve the variable
+            // Priority: 1. Context (from .env.example) -> 2. Shell environment -> 3. Default value
             let resolved_value = if let Some(value) = context.get(var_name) {
                 debug!("Resolved ${{{}}}: '{}' (from context)", var_name, value);
                 value.clone()
+            } else if let Ok(env_value) = std::env::var(var_name) {
+                debug!("Resolved ${{{}}}: '{}' (from shell environment)", var_name, env_value);
+                env_value
             } else if has_default {
                 debug!("Resolved ${{{}}}: '{}' (using default)", var_name, default_value);
                 default_value.to_string()
             } else {
                 // Strict mode: variable not found and no default
                 return Err(anyhow!(
-                    "Required variable '{}' not found in context and no default provided. \
+                    "Required variable '{}' not found in context, shell environment, or default. \
                      Use ${{{}:-default}} syntax to provide a default value.",
                     var_name, var_name
                 ));

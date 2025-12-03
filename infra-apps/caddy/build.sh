@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
+# 检测环境（必须在开头调用）
+detect_environment
+
 SERVICE_NAME="caddy"
 VERSION="$(get_version)"
 
@@ -20,7 +23,7 @@ cp "$SCRIPT_DIR/src/reload.sh" "$SCRIPT_DIR/src/restart.sh" "$SCRIPT_DIR/$DEPLOY
 # 获取环境变量（如果有）
 if [ -f "$SCRIPT_DIR/.env.example" ]; then
   echo "🔐 Fetching environment variables from AWS Parameter Store..."
-  psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
+  psenv -t "$SCRIPT_DIR/.env.example" -p "$AWS_PARAM_PATH" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 fi
 
 # 写入版本号

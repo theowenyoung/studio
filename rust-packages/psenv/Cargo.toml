@@ -1,6 +1,6 @@
 [package]
 name = "psenv"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 authors = ["Owen Young <theowenyoung@gmail.com>"]
 description = "A CLI tool to fetch secrets from AWS Parameter Store and generate .env files"

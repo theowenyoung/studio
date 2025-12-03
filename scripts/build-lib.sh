@@ -125,10 +125,8 @@ build_and_push_image() {
 
   cd "$repo_root"
 
-  # 检测环境（如果还没检测）
-  if [ -z "${DEPLOY_ENV:-}" ]; then
-    detect_environment
-  fi
+  # 确保环境已检测
+  detect_environment
 
   # 生成标签
   local tag_latest=$(get_image_tag "latest")
@@ -163,6 +161,12 @@ build_and_push_image() {
 # ===== 环境检测 =====
 # 注入基础设施上下文变量 (CTX_*) 供 psenv 模板渲染使用
 detect_environment() {
+  # 如果已经检测过，直接返回（幂等性）
+  if [ -n "${DEPLOY_ENV:-}" ]; then
+    echo "ℹ️  Environment already detected: $DEPLOY_ENV"
+    return 0
+  fi
+
   local current_branch=$(git rev-parse --abbrev-ref HEAD)
   export CURRENT_BRANCH="$current_branch"
 
@@ -186,6 +190,9 @@ detect_environment() {
 
     export CTX_PG_HOST="postgres"
     export CTX_REDIS_HOST="redis"
+
+    # AWS Parameter Store 路径
+    export AWS_PARAM_PATH="/studio-prod/"
   else
     # === Preview Environment ===
     export DEPLOY_ENV="preview"
@@ -204,11 +211,15 @@ detect_environment() {
 
     # 4. 根域名
     export CTX_ROOT_DOMAIN="preview.owenyoung.com"
+
+    # AWS Parameter Store 路径
+    export AWS_PARAM_PATH="/studio-dev/"
   fi
 
   echo "🔧 Environment: $DEPLOY_ENV"
   echo "🌳 Branch: $current_branch (clean: $BRANCH_CLEAN)"
   echo "📦 Service: $CTX_SERVICE_NAME"
+  echo "🔐 AWS Param Path: $AWS_PARAM_PATH"
   if [ "$DEPLOY_ENV" = "preview" ]; then
     echo "📊 Context: DB_SUFFIX=$CTX_DB_SUFFIX, DNS_SUFFIX=$CTX_DNS_SUFFIX"
   fi
