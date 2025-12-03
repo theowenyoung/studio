@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
+# 检测环境
+detect_environment
+
 SERVICE_NAME="meilisearch"
 VERSION="$(get_version)"
 
@@ -14,7 +17,7 @@ mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 
 # 获取环境变量
 echo "🔐 Fetching environment variables from AWS Parameter Store..."
-psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
+psenv -t "$SCRIPT_DIR/.env.example" -p "$AWS_PARAM_PATH" -o "$SCRIPT_DIR/$DEPLOY_DIST/.env"
 
 # 复制 docker-compose 配置
 cp "$SCRIPT_DIR/docker-compose.prod.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"

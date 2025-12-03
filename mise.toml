@@ -391,14 +391,12 @@ run = "bash scripts/deploy-app.sh storefront"
 
 # External 应用部署
 [tasks.deploy-meilisearch]
-description = "Deploy meilisearch to prod"
-depends = ["build-meilisearch"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-external-app.yml -e service_name=meilisearch"
+description = "Deploy meilisearch (auto-detect environment)"
+run = "bash scripts/deploy-external-app.sh meilisearch"
 
 [tasks.deploy-owen-blog]
-description = "Deploy owen-blog to prod"
-depends = ["build-owen-blog"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-external-app.yml -e service_name=owen-blog"
+description = "Deploy owen-blog (auto-detect environment)"
+run = "bash scripts/deploy-external-app.sh owen-blog"
 
 # 数据库迁移部署
 [tasks.deploy-db-admin]
@@ -503,8 +501,8 @@ alias = "server-configure-aws"
 
 # 备份与恢复（通过 Ansible 触发）
 [tasks.server-backup]
-description = "Run backup on prod server"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/run-backup.yml"
+description = "Run backup (auto-detect environment, production only)"
+run = "bash scripts/server-operation.sh backup run-backup.yml"
 alias = "backup"
 
 # Volume 管理
@@ -522,17 +520,10 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l
 alias = "resize"
 
 # Docker 数据清理（系统重建前备份）
-[tasks.server-clean-docker-prod]
-description = "Clean Docker data on prod server (move to .old backup before rebuild)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/clean-docker.yml -l prod"
-
-[tasks.server-clean-docker-preview]
-description = "Clean Docker data on preview server (move to .old backup before rebuild)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/clean-docker.yml -l preview"
-
 [tasks.server-clean-docker]
-description = "Clean Docker data on all servers (move to .old backup before rebuild)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/clean-docker.yml -l all"
+description = "Clean Docker data (auto-detect environment, move to .old backup before rebuild)"
+run = "bash scripts/server-operation.sh clean-docker clean-docker.yml"
+alias = "clean-docker"
 
 # Note: 其他服务器运维任务（查看日志、恢复数据库、查看备份等）
 # 请 SSH 到服务器后使用 server-mise.toml 中定义的任务

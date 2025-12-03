@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
+# 检测环境
+detect_environment
+
 SERVICE_NAME="owen-blog"
 REPO_URL="https://github.com/theowenyoung/blog"
 VERSION="$(get_version)"
@@ -13,7 +16,7 @@ echo "🔨 Building $SERVICE_NAME (version: $VERSION)"
 
 # 获取 GitHub token
 echo "🔐 Fetching GitHub token from AWS Parameter Store..."
-psenv -t "$SCRIPT_DIR/.env.example" -p "/studio-prod/" -o "$SCRIPT_DIR/.env.temp"
+psenv -t "$SCRIPT_DIR/.env.example" -p "$AWS_PARAM_PATH" -o "$SCRIPT_DIR/.env.temp"
 source "$SCRIPT_DIR/.env.temp"
 
 # 创建临时构建目录
