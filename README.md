@@ -18,7 +18,7 @@ fi
 
 source <(mise completion bash --include-bash-completion-lib)
 
-# 别人自动补全
+# 别名自动补全
 function mr() {
   mise run "$@"
 }
@@ -63,7 +63,7 @@ mr dev-db-admin
 
 # 首次启动 hono 应用, 生成数据库表
 
-mr migrate-hono
+mr db-migrate-hono
 
 
 ```
@@ -77,7 +77,7 @@ mr migrate-hono
 mr dev-hono
 
 # 启动所有应用
-make dev
+mr dev
 
 ```
 
