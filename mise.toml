@@ -457,8 +457,13 @@ for ip in ${usage_ip?}; do
 done
 '''
 
+
 # 服务器初始化 (显式指定目标 - 极度危险，必须手动确认)
 # 规则: 初始化操作太危险且频率极低，必须显式指定目标，不自动检测
+[tasks.server-init]
+description = "Initialize all servers (prod + preview) - DANGEROUS"
+depends = ["server-init-prod", "server-init-preview"]
+
 [tasks.server-init-prod]
 description = "Initialize prod server (security, docker, directories, mise, aliases)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l prod"
