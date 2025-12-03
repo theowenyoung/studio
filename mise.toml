@@ -336,25 +336,22 @@ run = "bash external-apps/owen-blog/build.sh"
 
 # 基础设施部署
 [tasks.deploy-infra]
-description = "Deploy all infrastructure services to ALL servers (prod + preview)"
-run = ["mise run deploy-infra-postgres", "mise run deploy-infra-redis", "mise run deploy-infra-caddy", "mise run deploy-infra-backup"]
+description = "Deploy all infrastructure services (auto-detect environment from git branch)"
+run = "bash scripts/deploy-infra.sh all"
 
 [tasks.deploy-infra-postgres]
-description = "Deploy PostgreSQL to all servers"
-depends = ["build-infra-postgres"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-postgres.yml -l all"
+description = "Deploy PostgreSQL (auto-detect environment)"
+run = "bash scripts/deploy-infra.sh postgres"
 alias = "deploy-postgres"
 
 [tasks.deploy-infra-redis]
-description = "Deploy Redis to all servers"
-depends = ["build-infra-redis"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-redis.yml -l all"
+description = "Deploy Redis (auto-detect environment)"
+run = "bash scripts/deploy-infra.sh redis"
 alias = "deploy-redis"
 
 [tasks.deploy-infra-caddy]
-description = "Deploy Caddy to all servers"
-depends = ["build-infra-caddy"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy.yml -l all"
+description = "Deploy Caddy (auto-detect environment)"
+run = "bash scripts/deploy-infra.sh caddy"
 alias = "deploy-caddy"
 
 [tasks.deploy-infra-caddy-reload]
@@ -363,9 +360,8 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-
 alias = "reload-caddy"
 
 [tasks.deploy-infra-backup]
-description = "Deploy backup service to prod only"
-depends = ["build-infra-backup"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-backup.yml -l prod"
+description = "Deploy backup service (production only)"
+run = "bash scripts/deploy-infra.sh backup"
 
 # JS 应用部署（智能检测环境：main=production, 其他=preview）
 [tasks.deploy-apps]

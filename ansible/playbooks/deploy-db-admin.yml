@@ -1,6 +1,6 @@
 ---
 - name: Deploy DB Admin (Run Migrations)
-  hosts: "{{ target_host | default('prod_servers') }}"
+  hosts: all
   gather_facts: no
 
   vars:

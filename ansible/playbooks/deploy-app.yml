@@ -4,8 +4,9 @@
   gather_facts: no
 
   vars:
+    service_base: "{{ service_base }}"
     service_name: "{{ service_name }}"
-    local_dist: "{{ playbook_dir }}/../../js-apps/{{ service_name }}/deploy-dist"
+    local_dist: "{{ playbook_dir }}/../../js-apps/{{ service_base }}/deploy-dist"
     remote_dir: "/srv/studio/js-apps/{{ service_name }}"
 
   tasks:
@@ -43,26 +44,11 @@
       register: pull_result
       changed_when: false
 
-    # ===== Database setup (all environments) =====
-    - name: Ensure database exists
-      shell: |
-        docker exec postgres psql -U postgres -c "
-        SELECT 1 FROM pg_database WHERE datname='{{ database_name }}'
-        " | grep -q 1 || \
-        docker exec postgres psql -U postgres -c "
-        CREATE DATABASE {{ database_name }} OWNER app_user;
-        REVOKE CONNECT ON DATABASE {{ database_name }} FROM PUBLIC;
-        GRANT CONNECT ON DATABASE {{ database_name }} TO app_user;
-        COMMENT ON DATABASE {{ database_name }} IS 'Environment: {{ target_env }} | Branch: {{ branch_name }} | Service: {{ service_base }} | Created: $(date -u +%Y-%m-%dT%H:%M:%SZ)';
-        "
-      changed_when: false
-      failed_when: false
-
     # ===== Database migrations (optional) =====
     - name: Check if migrations service exists
       shell: |
         cd {{ remote_dir }}
-        docker compose --profile migrate config --services 2>/dev/null | grep -q "{{ service_name }}-migrate"
+        docker compose --profile migrate config --services 2>/dev/null | grep -q "{{ service_base }}-migrate"
       register: has_migrations
       failed_when: false
       changed_when: false
@@ -70,7 +56,7 @@
     - name: Run database migrations
       shell: |
         cd {{ remote_dir }}
-        docker compose --profile migrate run --rm {{ service_name }}-migrate
+        docker compose --profile migrate run --rm {{ service_base }}-migrate
       register: migrate_result
       when: has_migrations.rc == 0
 
@@ -104,7 +90,7 @@
     - name: Verify container is running after rollout
       shell: |
         cd {{ remote_dir }}
-        docker compose ps {{ service_name }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
+        docker compose ps {{ service_base }} --format json 2>/dev/null | jq -r '.State // empty' | head -1
       register: container_state
       changed_when: false
       failed_when: false
@@ -112,7 +98,7 @@
     - name: Get container logs if deployment failed
       shell: |
         cd {{ remote_dir }}
-        docker compose logs --tail=50 {{ service_name }}
+        docker compose logs --tail=50 {{ service_base }}
       register: container_logs
       when: deploy_result.rc != 0 or (container_state.stdout != "running" and container_state.stdout != "running (healthy)")
 
