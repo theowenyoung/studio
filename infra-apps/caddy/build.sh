@@ -20,6 +20,13 @@ cp "$SCRIPT_DIR/docker-compose.prod.yml" "$SCRIPT_DIR/$DEPLOY_DIST/docker-compos
 cp -r "$SCRIPT_DIR/src/config" "$SCRIPT_DIR/$DEPLOY_DIST/"
 cp "$SCRIPT_DIR/src/reload.sh" "$SCRIPT_DIR/src/restart.sh" "$SCRIPT_DIR/$DEPLOY_DIST/"
 
+# Preview 环境：清空 production 目录（避免为生产域名申请证书）
+# Preview 的应用域名配置由 deploy-app.yml 自动生成到 preview/ 目录
+if [ "$DEPLOY_ENV" = "preview" ]; then
+  echo "🔧 Preview environment: clearing production configs"
+  rm -f "$SCRIPT_DIR/$DEPLOY_DIST/config/production/"*.caddy
+fi
+
 # 获取环境变量（如果有）
 if [ -f "$SCRIPT_DIR/.env.example" ]; then
   echo "🔐 Fetching environment variables from AWS Parameter Store..."

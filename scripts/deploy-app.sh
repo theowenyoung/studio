@@ -25,7 +25,9 @@ detect_environment
 if [ "$DEPLOY_ENV" = "preview" ]; then
     SERVICE_NAME="${SERVICE_BASE}-${BRANCH_CLEAN}"
     DATABASE_NAME=$(echo "${SERVICE_BASE}" | tr '-' '_')"_${BRANCH_CLEAN//-/_}"
-    DOMAIN="${BRANCH_CLEAN}-${SERVICE_BASE}-preview.owenyoung.com"
+    # 域名格式: hono-demo-feat-test-preview.preview.owenyoung.com
+    # 与 .env.example 中 APP_URL 模板保持一致
+    DOMAIN="${SERVICE_BASE}-${BRANCH_CLEAN}.preview.owenyoung.com"
 else
     SERVICE_NAME="${SERVICE_BASE}"
     DATABASE_NAME=$(echo "${SERVICE_BASE}" | tr '-' '_')

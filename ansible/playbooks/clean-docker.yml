@@ -1,7 +1,7 @@
 ---
-# 清理 Docker 数据目录（移动到 .old 备份）
-# 使用场景：系统重建前备份 Docker 数据
-- name: Clean Docker Data Directory
+# 清理 Docker（完全卸载 + 备份数据）
+# 使用场景：系统重建前彻底清理 Docker
+- name: Clean Docker (Uninstall + Backup Data)
   hosts: all
   become: yes
   gather_facts: yes
@@ -10,26 +10,7 @@
     docker_data_root: /data/docker
 
   tasks:
-    - name: Check if Docker is running
-      systemd:
-        name: docker
-      register: docker_service
-      ignore_errors: yes
-
-    - name: Stop Docker service
-      systemd:
-        name: docker
-        state: stopped
-      when: docker_service.status.ActiveState == "active"
-      tags: [docker-stop]
-
-    - name: Stop Docker socket
-      systemd:
-        name: docker.socket
-        state: stopped
-      ignore_errors: yes
-      tags: [docker-stop]
-
+    # 1. 备份数据目录
     - name: Check if Docker data directory exists
       stat:
         path: "{{ docker_data_root }}"
@@ -43,28 +24,48 @@
     - name: Move Docker data directory to backup
       command: mv "{{ docker_data_root }}" "{{ backup_path }}"
       when: docker_data_dir.stat.exists
-      tags: [backup]
 
-    - name: Display backup location
+    # 2. 完全卸载 Docker（官方推荐方式）
+    # apt purge 会自动：停止服务、清理 systemd、删除网络接口
+    - name: Purge Docker packages
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+          - docker-ce-rootless-extras
+        state: absent
+        purge: yes
+      ignore_errors: yes
+
+    # 3. 清理默认数据目录（如果存在）
+    - name: Remove default Docker directories
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/docker
+        - /var/lib/containerd
+      ignore_errors: yes
+
+    # 4. 清理配置文件
+    - name: Remove Docker config
+      file:
+        path: /etc/docker/daemon.json
+        state: absent
+      ignore_errors: yes
+
+    - name: Display completion message
       debug:
         msg:
-          - "✅ Docker 数据已备份"
-          - "原路径: {{ docker_data_root }}"
-          - "备份路径: {{ backup_path }}"
+          - "✅ Docker 已完全卸载"
           - ""
-          - "⚠️  Docker 服务已停止"
+          - "{% if docker_data_dir.stat.exists %}📦 数据已备份到: {{ backup_path }}{% else %}ℹ️  无数据需要备份{% endif %}"
+          - ""
           - "下一步："
-          - "  1. 执行系统重建操作"
-          - "  2. 运行 mise run server-init 初始化服务器"
+          - "  mise run server-update  # 重新安装和配置 Docker"
           - ""
           - "💡 如需恢复数据："
-          - "  mv {{ backup_path }} {{ docker_data_root }}"
-      when: docker_data_dir.stat.exists
-
-    - name: Show message if directory doesn't exist
-      debug:
-        msg:
-          - "ℹ️  Docker 数据目录不存在"
-          - "路径: {{ docker_data_root }}"
-          - "无需备份"
-      when: not docker_data_dir.stat.exists
+          - "  mv {{ backup_path | default(docker_data_root + '.old-*') }} {{ docker_data_root }}"

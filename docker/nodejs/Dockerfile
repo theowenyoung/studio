@@ -10,8 +10,6 @@
 FROM node:22-alpine AS base
 
 # 启用 pnpm（用 corepack，版本可跟随 package.json 的 packageManager）
-ENV PNPM_HOME=/usr/local/share/pnpm
-ENV PATH="${PNPM_HOME}:${PATH}"
 RUN corepack enable
 
 # ---------- Builder ----------
@@ -41,35 +39,33 @@ RUN pnpm -w --filter "./${APP_PATH}" run ${BUILD_SCRIPT}
 # 需要 pnpm v8.15+/v9（corepack 通常会给到较新版本）
 RUN pnpm --filter="./${APP_PATH}" deploy --prod /out
 
+# 提取 pnpm 版本供 runtime 阶段使用
+RUN node -p "require('./package.json').packageManager.replace('pnpm@', '')" > /tmp/pnpm-version
+
 # ---------- Runtime ----------
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# 安装 bash 和 postgresql-client（用于迁移脚本）
+# 安装运行时依赖
 RUN apk add --no-cache bash postgresql-client
 
-# 启用 pnpm（用于运行迁移等任务）
-ENV PNPM_HOME=/usr/local/share/pnpm
-ENV PATH="${PNPM_HOME}:${PATH}"
-RUN corepack enable
-
-# 非 root 运行
-RUN addgroup --system --gid 1001 nodejs \
- && adduser  --system --uid 1001 appuser
+# 从 builder 获取 pnpm 版本并安装
+COPY --from=builder /tmp/pnpm-version /tmp/pnpm-version
+RUN corepack enable && \
+    corepack prepare pnpm@$(cat /tmp/pnpm-version) --activate && \
+    rm /tmp/pnpm-version
 
 # 从 builder 导入"已裁剪的"产物
-COPY --from=builder --chown=appuser:nodejs /out/ /app/
+COPY --from=builder /out/ /app/
 
 # 复制 scripts 目录到根目录（供迁移脚本使用）
 # package.json 中的迁移命令使用 ../../scripts，从 /app 算起即 /scripts
-COPY --from=builder --chown=appuser:nodejs /repo/scripts /scripts
+COPY --from=builder /repo/scripts /scripts
 
 # 暴露端口
 ARG EXPOSE_PORT=3000
 EXPOSE ${EXPOSE_PORT}
-
-USER appuser
 
 # 默认启动命令（会被 docker-compose.yml 的 command 覆盖）
 CMD ["node", "dist/server/index.js"]
