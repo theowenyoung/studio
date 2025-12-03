@@ -2,7 +2,7 @@
 python = "latest"
 zig = "latest"
 bun = "latest"
-node = "latest"
+node = "lts"
 rust = "latest"
 "cargo:psenv" = "latest"
 "zola" = "latest"
