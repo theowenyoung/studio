@@ -417,8 +417,22 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.y
 
 
 # ==================== 服务器管理 (server-) ====================
+#
+# 任务分类原则：
+#
+# 【第一类】严格分支绑定 (Strict Branch Binding)
+# - 规则：在 main 分支只能操作 Prod，在其他分支只能操作 Preview
+# - 包括：deploy-*, server-update, sync-config, server-configure-aws, backup, clean-docker
+# - 原因：这些操作会修改配置文件或同步代码，必须确保环境隔离
+#
+# 【第二类】显式指定目标 (Explicit Targeting)
+# - 规则：必须在任务名中明确指定 -prod/-preview 后缀
+# - 包括：server-init-*, server-resize-volume-*, ssh-*
+# - 原因：初始化/危险操作太重要，resize 频率极低，必须手动确认目标
+#
+# ====================
 
-# 快捷 SSH 连接
+# SSH 连接 (显式指定目标 - 只读操作)
 
 [tasks.ssh]
 description = "SSH to prod server and cd to /srv/studio"
@@ -443,7 +457,8 @@ for ip in ${usage_ip?}; do
 done
 '''
 
-# 服务器初始化
+# 服务器初始化 (显式指定目标 - 极度危险，必须手动确认)
+# 规则: 初始化操作太危险且频率极低，必须显式指定目标，不自动检测
 [tasks.server-init-prod]
 description = "Initialize prod server (security, docker, directories, mise, aliases)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l prod"
@@ -452,52 +467,21 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.y
 description = "Initialize preview server (security, docker, directories, mise, aliases)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l preview"
 
-[tasks.server-init-all]
-description = "Initialize all servers (use with caution)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l all"
-alias = "server-init"
-
-# 服务器普通更新
-[tasks.server-update-prod]
-description = "Update prod server configuration (skip system update)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -l prod"
-
-[tasks.server-update-preview]
-description = "Update preview server configuration (skip system update)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -l preview"
-
-[tasks.server-update-all]
-description = "Update all servers configuration (skip system update)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -l all"
-alias = "server-update"
+# 服务器配置更新 (严格分支绑定)
+[tasks.server-update]
+description = "Update server configuration (auto-detect target: main→prod, other→preview)"
+run = "bash scripts/server-operation.sh update init-server.yml"
 
 
-# 同步服务器配置
-[tasks.server-sync-config-prod]
-description = "Sync server-mise.toml and bash_aliases to prod server"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/sync-server-config.yml -l prod"
+# 同步服务器配置 (严格分支绑定)
+[tasks.sync-config]
+description = "Sync server-mise.toml and bash_aliases (auto-detect target: main→prod, other→preview)"
+run = "bash scripts/server-operation.sh sync-config sync-server-config.yml"
 
-[tasks.server-sync-config-preview]
-description = "Sync server-mise.toml and bash_aliases to preview server"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/sync-server-config.yml -l preview"
-
-[tasks.server-sync-config-all]
-description = "Sync server-mise.toml and bash_aliases to all servers"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/sync-server-config.yml -l all"
-alias = "sync-config"
-
-[tasks.server-configure-aws-prod]
-description = "Configure AWS credentials on prod server (for ECR access)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml -l prod"
-
-[tasks.server-configure-aws-preview]
-description = "Configure AWS credentials on preview server (for ECR access)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml -l preview"
-
-[tasks.server-configure-aws-all]
-description = "Configure AWS credentials on all servers (for ECR access)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/configure-aws-credentials.yml -l all"
-alias = "server-configure-aws"
+# 配置 AWS 凭证 (严格分支绑定)
+[tasks.server-configure-aws]
+description = "Configure AWS credentials for ECR access (auto-detect target: main→prod, other→preview)"
+run = "bash scripts/server-operation.sh configure-aws configure-aws-credentials.yml"
 
 # 备份与恢复（通过 Ansible 触发）
 [tasks.server-backup]
@@ -505,7 +489,7 @@ description = "Run backup (auto-detect environment, production only)"
 run = "bash scripts/server-operation.sh backup run-backup.yml"
 alias = "backup"
 
-# Volume 管理
+# Volume 管理 (显式指定目标 - 危险操作)
 [tasks.server-resize-volume-prod]
 description = "Resize Hetzner volume on prod server (expand filesystem)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l prod"
@@ -513,11 +497,6 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l
 [tasks.server-resize-volume-preview]
 description = "Resize Hetzner volume on preview server (expand filesystem)"
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l preview"
-
-[tasks.server-resize-volume-all]
-description = "Resize Hetzner volume on all servers (expand filesystem)"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l all"
-alias = "resize"
 
 # Docker 数据清理（系统重建前备份）
 [tasks.server-clean-docker]
