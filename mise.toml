@@ -336,25 +336,25 @@ run = "bash external-apps/owen-blog/build.sh"
 
 # 基础设施部署
 [tasks.deploy-infra]
-description = "Deploy all infrastructure services"
-run = ["mise run deploy-infra-postgres", "mise run deploy-infra-redis", "mise run deploy-infra-caddy", "mise run deploy-infra-backup", "mise run deploy-infra-db-admin"]
+description = "Deploy all infrastructure services to ALL servers (prod + preview)"
+run = ["mise run deploy-infra-postgres", "mise run deploy-infra-redis", "mise run deploy-infra-caddy", "mise run deploy-infra-backup"]
 
 [tasks.deploy-infra-postgres]
-description = "Deploy PostgreSQL to prod"
+description = "Deploy PostgreSQL to all servers"
 depends = ["build-infra-postgres"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-postgres.yml"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-postgres.yml -l all"
 alias = "deploy-postgres"
 
 [tasks.deploy-infra-redis]
-description = "Deploy Redis to prod"
+description = "Deploy Redis to all servers"
 depends = ["build-infra-redis"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-redis.yml"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-redis.yml -l all"
 alias = "deploy-redis"
 
 [tasks.deploy-infra-caddy]
-description = "Deploy Caddy to prod"
+description = "Deploy Caddy to all servers"
 depends = ["build-infra-caddy"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy.yml"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy.yml -l all"
 alias = "deploy-caddy"
 
 [tasks.deploy-infra-caddy-reload]
@@ -363,9 +363,9 @@ run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-
 alias = "reload-caddy"
 
 [tasks.deploy-infra-backup]
-description = "Deploy backup service to prod"
+description = "Deploy backup service to prod only"
 depends = ["build-infra-backup"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-backup.yml"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-backup.yml -l prod"
 
 # JS 应用部署（智能检测环境：main=production, 其他=preview）
 [tasks.deploy-apps]
@@ -405,11 +405,17 @@ depends = ["build-owen-blog"]
 run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-external-app.yml -e service_name=owen-blog"
 
 # 数据库迁移部署
-[tasks.deploy-infra-db-admin]
-description = "Run database migrations in prod"
-depends = ["build-db-admin"]
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-db-admin.yml"
-alias = "deploy-db-admin"
+[tasks.deploy-db-admin]
+description = "Run database migrations (auto-detect environment from git branch)"
+run = "bash scripts/deploy-db-admin.sh"
+
+[tasks.deploy-db-admin-prod]
+description = "Run database migrations on production (force)"
+run = "bash scripts/deploy-db-admin.sh prod"
+
+[tasks.deploy-db-admin-preview]
+description = "Run database migrations on preview (force)"
+run = "bash scripts/deploy-db-admin.sh preview"
 
 [tasks.deploy-migrate-hono]
 description = "Run hono-demo migrations in prod"

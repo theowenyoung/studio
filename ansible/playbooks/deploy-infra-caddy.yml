@@ -1,6 +1,6 @@
 ---
 - name: Deploy Caddy Infrastructure
-  hosts: prod_servers  # 基础设施默认只在生产环境
+  hosts: all  # 部署到所有服务器
   gather_facts: no
 
   vars:

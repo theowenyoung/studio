@@ -1,12 +1,13 @@
 ---
 - name: Deploy DB Admin (Run Migrations)
-  hosts: prod_servers  # 数据库迁移默认在生产环境
+  hosts: "{{ target_host | default('prod_servers') }}"
   gather_facts: no
 
   vars:
     service_name: "db-admin"
     local_dist: "{{ playbook_dir }}/../../infra-apps/db-admin/deploy-dist"
     remote_dir: "/srv/studio/infra-apps/db-admin"
+    deploy_env: "{{ deploy_env | default('prod') }}"
 
   tasks:
     - debug:
@@ -47,7 +48,7 @@
     - name: Run migrations
       shell: |
         cd {{ remote_dir }}
-        docker compose run --rm db-admin
+        docker compose run --rm -e DEPLOY_ENV={{ deploy_env }} db-admin
       register: migration_result
 
     - debug:

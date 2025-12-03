@@ -5,7 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 
 # 检测环境（必须在开头调用）
-detect_environment
+# 如果 DEPLOY_ENV 已经设置（例如从 Ansible 传入），则跳过检测
+if [ -z "${DEPLOY_ENV:-}" ]; then
+  detect_environment
+fi
 
 SERVICE_NAME="db-admin"
 VERSION="$(get_version)"
