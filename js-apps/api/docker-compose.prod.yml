@@ -1,5 +1,5 @@
 services:
-  # 代理服务
+  # 应用服务
   ${DOCKER_SERVICE_NAME}:
     image: ${IMAGE_TAG}
     restart: unless-stopped
@@ -7,7 +7,7 @@ services:
     networks:
       - shared
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/?_host=owenyoung.com"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/status"]
       interval: 30s
       timeout: 10s
       retries: 3
