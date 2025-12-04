@@ -1,86 +1,69 @@
 #!/bin/bash
 set -e
 
+# Preview environment listing script
+# Uses double separator (-- for DNS, __ for DB) to parse branch names
+
 SERVER="preview"
 INVENTORY="ansible/inventory.yml"
 
 echo "🔍 Fetching preview environments..."
 echo ""
 
-# Get containers
-containers=$(ansible $SERVER -i $INVENTORY -m shell -a 'docker ps --format "{% raw %}{{.Names}}{% endraw %}" | grep -v -E "^(postgres|redis|caddy)-" || true' 2>/dev/null | grep -v "|" | grep -v ">>" | grep -v "^$" || true)
+# Get containers (use -- separator)
+containers=$(ansible $SERVER -i $INVENTORY -m shell -a 'docker ps --format "{% raw %}{{.Names}}{% endraw %}" | grep -E -- "--" || true' 2>/dev/null | grep -v "|" | grep -v ">>" | grep -v "^$" || true)
 
-# Get databases
-databases=$(ansible $SERVER -i $INVENTORY -m shell -a 'cd /srv/studio/infra-apps/postgres && docker compose exec -T postgres psql -U postgres -t -A -c "SELECT datname FROM pg_database WHERE datname NOT IN ('"'"'postgres'"'"','"'"'template0'"'"','"'"'template1'"'"')" || true' 2>/dev/null | grep -v "|" | grep -v ">>" | grep -v "^$" || true)
+# Get databases (use __ separator)
+databases=$(ansible $SERVER -i $INVENTORY -m shell -a 'cd /srv/studio/infra-apps/postgres && docker compose exec -T postgres psql -U postgres -t -A -c "SELECT datname FROM pg_database WHERE datname LIKE '"'"'%___%'"'"'" || true' 2>/dev/null | grep -v "|" | grep -v ">>" | grep -v "^$" || true)
 
-# Get app directories
-app_dirs=$(ansible $SERVER -i $INVENTORY -m shell -a 'ls -1 /srv/studio/js-apps/ 2>/dev/null || true' 2>/dev/null | grep -v "|" | grep -v ">>" | grep -v "^$" || true)
+# Get app directories (use -- separator)
+app_dirs=$(ansible $SERVER -i $INVENTORY -m shell -a 'ls -1 /srv/studio/js-apps/ 2>/dev/null | grep -E -- "--" || true' 2>/dev/null | grep -v "|" | grep -v ">>" | grep -v "^$" || true)
 
-# Get caddy configs
-caddy_configs=$(ansible $SERVER -i $INVENTORY -m shell -a 'ls -1 /srv/studio/infra-apps/caddy/config/sites/*.caddy 2>/dev/null | xargs -n1 basename || true' 2>/dev/null | grep -v "|" | grep -v ">>" | grep -v "^$" || true)
+# Get caddy configs (use -- separator)
+caddy_configs=$(ansible $SERVER -i $INVENTORY -m shell -a 'ls -1 /srv/studio/infra-apps/caddy/config/preview/*.caddy 2>/dev/null | xargs -n1 basename | grep -E -- "--" || true' 2>/dev/null | grep -v "|" | grep -v ">>" | grep -v "^$" || true)
 
-# Extract branches
+# Extract unique branch names
 declare -A branches
 
-# From containers: pattern {service}-{branch}-{service}-1
-# e.g., hono-demo-feat-test-hono-demo-1 -> feat-test
+# From containers: pattern {service}--{branch}-{service}-1
+# Split by -- and take the second part, then remove -service-N suffix
 while IFS= read -r name; do
   [ -z "$name" ] && continue
-  name="${name%-[0-9]*}"  # Remove -1
-  # Split by - and find where pattern repeats
-  # hono-demo-feat-test-hono-demo -> service=hono-demo, branch=feat-test
-  # Find the middle part between two identical service names
-  IFS='-' read -ra parts <<< "$name"
-  len=${#parts[@]}
-  for ((i=1; i<len-1; i++)); do
-    # Check if parts[0..i-1] == parts[i+k..end] for some k
-    prefix="${parts[*]:0:$i}"
-    prefix="${prefix// /-}"
-    for ((j=i+1; j<len; j++)); do
-      suffix="${parts[*]:$j}"
-      suffix="${suffix// /-}"
-      if [ "$prefix" = "$suffix" ]; then
-        # Branch is parts[i..j-1]
-        branch="${parts[*]:$i:$((j-i))}"
-        branch="${branch// /-}"
-        [ -n "$branch" ] && branches["$branch"]=1
-        break 2
-      fi
-    done
-  done
+  if [[ "$name" == *"--"* ]]; then
+    # Extract part after --
+    after_sep="${name#*--}"
+    # Remove trailing -service-N (everything from the last hyphen-word-number)
+    branch=$(echo "$after_sep" | sed 's/-[a-z]*-[0-9]*$//')
+    [ -n "$branch" ] && branches["$branch"]=1
+  fi
 done <<< "$containers"
 
-# From databases: pattern service_branch (2+ underscores = preview)
-# e.g., hono_demo_feat_test -> feat-test
+# From databases: pattern {service}__{branch}
+# Split by __ and convert underscore to hyphen
 while IFS= read -r db; do
   [ -z "$db" ] && continue
-  us="${db//[^_]}"
-  if [ ${#us} -ge 2 ]; then
-    # Remove service prefix (first two segments for compound names like hono_demo)
-    branch=$(echo "$db" | sed 's/^[a-z]*_[a-z]*_//' | tr '_' '-')
+  if [[ "$db" == *"__"* ]]; then
+    branch="${db#*__}"
+    branch="${branch//_/-}"  # Convert to hyphen format
     [ -n "$branch" ] && branches["$branch"]=1
   fi
 done <<< "$databases"
 
-# From app dirs: pattern service-branch
-# e.g., hono-demo-feat-test -> feat-test
+# From app dirs: pattern {service}--{branch}
 while IFS= read -r dir; do
   [ -z "$dir" ] && continue
-  hs="${dir//[^-]}"
-  if [ ${#hs} -ge 2 ]; then
-    # Remove service prefix (first two segments for compound names like hono-demo)
-    branch=$(echo "$dir" | sed 's/^[a-z]*-[a-z]*-//')
+  if [[ "$dir" == *"--"* ]]; then
+    branch="${dir#*--}"
     [ -n "$branch" ] && branches["$branch"]=1
   fi
 done <<< "$app_dirs"
 
-# From caddy: pattern branch-service-preview.caddy
-# e.g., feat-test-hono-demo-preview.caddy -> feat-test
+# From caddy: pattern {service}--{branch}.caddy
 while IFS= read -r conf; do
   [ -z "$conf" ] && continue
   name="${conf%.caddy}"
-  if [[ "$name" =~ -preview$ ]]; then
-    branch=$(echo "$name" | sed 's/-[a-z]*-preview$//')
+  if [[ "$name" == *"--"* ]]; then
+    branch="${name#*--}"
     [ -n "$branch" ] && branches["$branch"]=1
   fi
 done <<< "$caddy_configs"

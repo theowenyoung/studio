@@ -210,11 +210,12 @@ detect_environment() {
     export ANSIBLE_TARGET="preview"
 
     # 预览环境上下文
-    # 1. 数据库后缀 (下划线风格): _feat_auth
-    export CTX_DB_SUFFIX="_${BRANCH_CLEAN//-/_}"
+    # 使用双分隔符便于解析：服务名--分支名 / 服务名__分支名
+    # 1. 数据库后缀 (双下划线分隔): __feat_auth
+    export CTX_DB_SUFFIX="__${BRANCH_CLEAN//-/_}"
 
-    # 2. 域名后缀 (中划线风格): -feat-auth
-    export CTX_DNS_SUFFIX="-${BRANCH_CLEAN}"
+    # 2. 域名后缀 (双中划线分隔): --feat-auth
+    export CTX_DNS_SUFFIX="--${BRANCH_CLEAN}"
 
     # 3. 基础设施 Host (Docker Service Name)
     export CTX_PG_HOST="postgres"

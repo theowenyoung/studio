@@ -303,9 +303,9 @@ jobs:
             const services = matrix.include.map(item => item.service);
 
             // 生成预览 URL 列表
-            // 格式: {service}-{branch}.preview.owenyoung.com
+            // 格式: {service}--{branch}.preview.owenyoung.com (双中划线分隔)
             const urls = services.map(service => {
-              const domain = `${service}-${branchClean}.preview.owenyoung.com`;
+              const domain = `${service}--${branchClean}.preview.owenyoung.com`;
               return `- **${service}**: https://${domain}`;
             }).join('\n');
 
