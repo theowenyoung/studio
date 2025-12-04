@@ -4,149 +4,95 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Multi-language monorepo for deploying containerized applications to Hetzner servers using Docker, Ansible, and mise for task orchestration. Supports production and preview environments with automated deployments.
+Personal monorepo for deploying containerized applications to Hetzner servers. Uses mise for task management and pnpm for JS package management.
 
-**Stack:** mise (task runner), pnpm (workspaces), Ansible + Docker Compose + AWS ECR (deployment), PostgreSQL, Redis, Caddy, TypeScript/Node.js, Rust (psenv tool)
+## Common Commands
 
-## Repository Structure
+All commands use `mise run` (alias `mr`):
 
-```
-studio-new/
-├── js-apps/           # Node.js apps (hono-demo, proxy, blog, storefront, api, admin)
-├── js-packages/       # Shared TypeScript packages
-├── infra-apps/        # Infrastructure (postgres, redis, caddy, backup, db-admin)
-├── external-apps/     # Third-party services (meilisearch, owen-blog)
-├── rust-packages/     # psenv - AWS Parameter Store sync tool
-├── ansible/           # Deployment playbooks and inventory
-├── docker/            # Shared Dockerfiles (nodejs, nodejs-ssg, static-site)
-└── scripts/           # Build and deployment scripts
-```
-
-## Essential Commands
-
-**Use `mise run` (or `mr` alias) at root level, NOT npm/pnpm scripts.**
-
-### Local Development
-
+### Development
 ```bash
-# First-time setup
-mise run init              # Create Docker network
-mise run env               # Fetch .env files from AWS Parameter Store
-mise run up                # Start postgres, redis, caddy, meilisearch
-mise run dev-db-admin      # Initialize database users/permissions
-mise run db-migrate-hono   # Run application migrations
-
-# Development servers
-mise run dev-hono          # Start hono-demo (http://localhost:8001)
-mise run dev-proxy         # Start proxy
-mise run dev               # Start ALL js-apps in parallel
-mise run dev-kill          # Kill zombie dev processes
-
-# Database
-mise run db                # PostgreSQL CLI
-mise run db-migrate-hono   # Run hono-demo migrations
+mr dev              # Start all JS apps in parallel
+mr dev-hono         # Start specific app (hono-demo, proxy, api)
+mr up               # Start local infrastructure (postgres, redis, caddy, meilisearch)
+mr down             # Stop local infrastructure
+mr env              # Fetch all dev environment variables from AWS Parameter Store
+mr db              # Connect to PostgreSQL
+mr dev-db-admin    # Run database admin migrations
+mr db-migrate-hono # Run hono-demo migrations
 ```
 
-### Working with JS Apps
-
+### Building & Testing
 ```bash
-# Add dependencies
-mise run addjs hono-demo express zod
-
-# Run custom commands
-mise run buildjs hono-demo build
-mise run buildjs hono-demo migrate:create add-users-table
+mr build           # Build all JS projects
+mr lint            # Lint all projects
+mr test            # Run tests
+mr format          # Format code with Prettier
 ```
 
-### Deployment
-
-Environment auto-detected from git branch: `main` → prod, other branches → preview.
-
+### Deployment (auto-detects environment from git branch)
 ```bash
-# Infrastructure
-mise run deploy-infra      # Deploy all (postgres, redis, caddy, backup)
-mise run deploy-db-admin   # Run database migrations
-
-# Applications
-mise run deploy-hono       # Build + deploy hono-demo
-mise run deploy-proxy
-mise run deploy-storefront
-mise run deploy-blog
+mr deploy-hono     # Deploy hono-demo (main=prod, other=preview)
+mr deploy-caddy    # Deploy Caddy
+mr deploy-db-admin # Run database migrations on server
+mr reload-caddy    # Quick reload Caddy config without rebuild
 ```
 
 ### Server Operations
-
 ```bash
-mise run ssh               # SSH to production
-mise run ssh-preview       # SSH to preview
-
-# On server (uses server-mise.toml)
-mr db-restore-s3           # Restore from S3 backup
-mr logs                    # View app logs
+mr ssh             # SSH to prod server
+mr ssh-preview     # SSH to preview server
+mr server-init     # Initialize servers (prod + preview)
+mr sync-config     # Sync server config files
 ```
 
 ## Architecture
 
-### Environment Detection (`scripts/build-lib.sh`)
+### Directory Structure
+- `js-apps/` - Node.js applications (hono-demo, proxy, blog, storefront, api, admin)
+- `js-packages/` - Shared TypeScript packages (config-eslint, config-typescript, jest-presets, logger, ui)
+- `infra-apps/` - Infrastructure services (postgres, redis, caddy, backup, db-admin)
+- `external-apps/` - Third-party services (meilisearch, owen-blog)
+- `rust-packages/` - Rust tools (psenv for AWS Parameter Store sync)
+- `ansible/` - Deployment playbooks
+- `scripts/` - Build and deployment scripts
 
-- Auto-detects `DEPLOY_ENV` from git branch
-- Injects `CTX_*` context variables for template rendering
-- Preview branches get: `CTX_DB_SUFFIX`, `CTX_DNS_SUFFIX` for resource namespacing
+### Environment Detection
+Git branch determines deployment target automatically:
+- `main` branch -> production environment
+- Other branches -> preview environment with isolated database/domain/container per branch
 
-### Two-Phase Environment Variable Rendering
+### Environment Variables
+Uses `psenv` (Rust tool) for two-phase template rendering:
+- Source variables: pulled from AWS Parameter Store at build time
+- Computed variables: `${CTX_*}` prefixed vars injected by build scripts
+- Local dev: omitted `CTX_*` vars use localhost defaults
 
-Uses `psenv` (Rust tool) with `.env.example` templates:
+### Preview Environment Isolation
+Each feature branch gets isolated resources:
+- Database: `feat-auth` -> `hono_demo_feat_auth`
+- Domain: `feat-auth` -> `https://hono-demo-feat-auth.preview.owenyoung.com`
+- Container: `feat-auth` -> `preview-feat-auth-hono-demo`
 
-1. **Source variables**: Fetched from AWS Parameter Store or shell environment
-2. **Computed variables**: Use `${VAR:-default}` syntax, rendered by psenv
+## Tech Stack
+- **Runtime**: Node.js 22+, pnpm 8.15.6
+- **Backend**: Hono
+- **Frontend**: React, Next.js, Vite
+- **Database**: PostgreSQL, Redis, Meilisearch
+- **Infrastructure**: Docker, Ansible, Caddy (reverse proxy)
+- **Version/Task Manager**: mise
 
+## Local Setup (First Time)
 ```bash
-# .env.example example
-POSTGRES_USER=                    # From AWS
-DB_HOST=${CTX_PG_HOST:-localhost} # Computed with context
-DATABASE_URL=postgresql://${POSTGRES_USER}@${DB_HOST}/${POSTGRES_DB}
+brew install mkcert
+mkcert -install
+mkdir -p infra-apps/caddy/.local/certs
+mkcert -cert-file infra-apps/caddy/.local/certs/_wildcard.studio.localhost.pem \
+       -key-file infra-apps/caddy/.local/certs/_wildcard.studio.localhost-key.pem \
+       "*.studio.localhost"
+mr env
+docker network create shared
+mr up
+mr dev-db-admin
+mr db-migrate-hono
 ```
-
-### Build Process
-
-Each app's `build.sh`:
-1. Detects environment from git branch
-2. Builds Docker image using shared Dockerfile from `docker/`
-3. Pushes to AWS ECR with version tag (UTC timestamp: YYYYMMDDHHMMSS)
-4. Generates `deploy-dist/` with docker-compose.yml, .env, version.txt
-
-### Deployment Process
-
-Ansible playbooks:
-1. Sync `deploy-dist/` to `/srv/studio/{app-type}/{app-name}/{version}/`
-2. Update `current` symlink
-3. Run migrations if applicable
-4. Execute `docker compose up -d`
-5. Health check, cleanup old versions (keep 3)
-
-### Server Directory Structure
-
-```
-/srv/studio/
-├── infra-apps/{service}/current/
-├── js-apps/{app}/current/
-└── external-apps/{service}/current/
-
-/data/
-├── docker/          # Docker volumes
-└── backups/         # Database backups
-```
-
-## Database
-
-- **Local dev**: Single PostgreSQL with shared credentials, `mise run dev-db-admin` to initialize
-- **Production**: Individual users per app with least-privilege, managed via `infra-apps/db-admin/` SQL migrations
-- **App migrations**: Use `node-pg-migrate` in each js-app, run with `mise run db-migrate-hono`
-
-## Key Files
-
-- `mise.toml`: All root-level task definitions
-- `server-mise.toml`: Server-side tasks (synced via Ansible)
-- `ansible/inventory.yml`: Server IPs and configuration
-- `scripts/build-lib.sh`: Shared build functions, environment detection
-- `docs/ENV_TEMPLATE_GUIDE.md`: Detailed env var template documentation
