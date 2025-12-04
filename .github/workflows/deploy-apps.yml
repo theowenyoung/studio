@@ -296,8 +296,9 @@ jobs:
             const services = matrix.include.map(item => item.service);
 
             // 生成预览 URL 列表
+            // 格式: {service}-{branch}.preview.owenyoung.com
             const urls = services.map(service => {
-              const domain = `${branchClean}-${service}-preview.owenyoung.com`;
+              const domain = `${service}-${branchClean}.preview.owenyoung.com`;
               return `- **${service}**: https://${domain}`;
             }).join('\n');
 
