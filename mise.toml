@@ -403,17 +403,6 @@ run = "bash scripts/deploy-external-app.sh owen-blog"
 description = "Run database migrations (auto-detect environment from git branch)"
 run = "bash scripts/deploy-db-admin.sh"
 
-[tasks.deploy-db-admin-prod]
-description = "Run database migrations on production (force)"
-run = "bash scripts/deploy-db-admin.sh prod"
-
-[tasks.deploy-db-admin-preview]
-description = "Run database migrations on preview (force)"
-run = "bash scripts/deploy-db-admin.sh preview"
-
-[tasks.deploy-migrate-hono]
-description = "Run hono-demo migrations in prod"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/migrate-app.yml -e service_name=hono-demo"
 
 
 # ==================== 服务器管理 (server-) ====================
@@ -590,22 +579,15 @@ run = 'pnpm --filter "./js-apps/${usage_project?}" ${usage_args?}'
 
 # ==================== 预览环境管理 ====================
 
-[tasks.preview-info]
-description = "Show current branch's preview environment info"
-alias = "info"
-run = "bash scripts/preview-info.sh"
-
-[tasks.preview-destroy]
-description = "Destroy current branch's preview environment"
-run = "bash scripts/preview-destroy.sh"
-
 [tasks.preview-list]
-description = "List all active preview environments on preview server"
-run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/list-previews.yml -l preview"
+description = "List all preview environments (by branch)"
+alias = "previews"
+run = "bash scripts/preview-list.sh"
 
-[tasks.preview-list-old]
-description = "List all old preview databases (default: >7 days)"
-run = "bash scripts/preview-list-old.sh"
+[tasks.preview-delete]
+description = "Delete a preview environment by branch name"
+run = "bash scripts/preview-delete.sh ${usage_branch:-} ${usage_yes:+--yes}"
 usage = '''
-arg "[days]" help="Age threshold in days (default: 7)"
+arg "<branch>" help="Branch name to delete (e.g., feat-test)"
+flag "-y --yes" help="Skip confirmation"
 '''
