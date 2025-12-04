@@ -83,18 +83,21 @@
     # =====================================
     # 6. 网络配置
     # =====================================
+    # 让 Docker 自动分配 subnet，避免固定 IP 导致的冲突问题
     - name: Create shared Docker network
       community.docker.docker_network:
         name: shared
         driver: bridge
-        ipam_config:
-          - subnet: "172.30.0.0/16"
-      # 使用 ignore_errors 防止网络已存在但参数微小差异导致的报错
-      ignore_errors: yes 
+      tags: [network]
+
+    - name: Get shared network info
+      command: docker network inspect shared --format '{{ "{{" }}(index .IPAM.Config 0).Subnet{{ "}}" }}'
+      register: shared_network_subnet
+      changed_when: false
       tags: [network]
 
     # =====================================
-    # 8. 安装工具
+    # 7. 安装工具
     # =====================================
     - name: Install docker-rollout
       include_tasks: ../tasks/install-docker-rollout.yml
@@ -105,4 +108,4 @@
         msg:
           - "✅ Docker 准备就绪"
           - "数据目录: /data/docker"
-          - "共享网络: shared (172.30.0.0/16)"
+          - "共享网络: shared ({{ shared_network_subnet.stdout }})"

@@ -1,5 +1,55 @@
 # Studio
 
+个人项目的 monorepo，用于部署容器化应用到 Hetzner 服务器。
+
+## 项目结构
+
+```
+studio-new/
+├── js-apps/           # Node.js 应用 (hono-demo, proxy, blog, storefront, api, admin)
+├── js-packages/       # 共享 TypeScript 包
+├── infra-apps/        # 基础设施 (postgres, redis, caddy, backup, db-admin)
+├── external-apps/     # 第三方服务 (meilisearch, owen-blog)
+├── rust-packages/     # Rust 工具 (psenv - AWS Parameter Store 同步)
+├── ansible/           # 部署 playbooks
+├── docker/            # 共享 Dockerfiles
+└── scripts/           # 构建和部署脚本
+```
+
+## 部署理念
+
+### 环境自动检测
+
+根据 git 分支自动决定部署目标：
+- **main 分支** → 生产环境 (prod)
+- **其他分支** → 预览环境 (preview)
+
+无需手动指定环境，`mr deploy-hono` 会自动检测当前分支并部署到对应服务器。
+
+### Preview 环境隔离
+
+每个功能分支都有独立的预览环境：
+- **数据库隔离**: 分支 `feat-auth` → 数据库 `hono_demo_feat_auth`
+- **域名隔离**: 分支 `feat-auth` → `https://hono-demo-feat-auth.preview.owenyoung.com`
+- **容器隔离**: 分支 `feat-auth` → 容器 `preview-feat-auth-hono-demo`
+
+### 环境变量模板渲染
+
+使用 `psenv` (Rust 工具) 进行两阶段渲染：
+
+```bash
+# .env.example 示例
+POSTGRES_USER=                                    # 源变量：从 AWS Parameter Store 获取
+DB_HOST=${CTX_PG_HOST:-localhost}                 # 计算变量：根据环境自动替换
+DATABASE_URL=postgresql://${POSTGRES_USER}@${DB_HOST}/${POSTGRES_DB}
+```
+
+- **源变量**: 敏感信息存储在 AWS Parameter Store，构建时拉取
+- **计算变量**: 使用 `${VAR:-default}` 语法，`CTX_*` 上下文变量由构建脚本自动注入
+- **本地开发**: 不设置 `CTX_*`，自动使用 localhost 默认值
+
+详细文档: [docs/ENV_TEMPLATE_GUIDE.md](docs/ENV_TEMPLATE_GUIDE.md)
+
 ## 原则
 
 

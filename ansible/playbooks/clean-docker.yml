@@ -26,7 +26,6 @@
       when: docker_data_dir.stat.exists
 
     # 2. 完全卸载 Docker（官方推荐方式）
-    # apt purge 会自动：停止服务、清理 systemd、删除网络接口
     - name: Purge Docker packages
       apt:
         name:
@@ -40,7 +39,39 @@
         purge: yes
       ignore_errors: yes
 
-    # 3. 清理默认数据目录（如果存在）
+    # 3. 清理残留的 Docker 网桥接口
+    # apt purge 不保证清理网桥，需要手动删除
+    - name: Find Docker bridge interfaces
+      shell: ip link show | grep -oP 'br-[a-f0-9]+' | sort -u
+      register: docker_bridges
+      changed_when: false
+      failed_when: false
+
+    - name: Remove Docker bridge interfaces
+      shell: |
+        ip link set {{ item }} down
+        ip link delete {{ item }}
+      loop: "{{ docker_bridges.stdout_lines }}"
+      when: docker_bridges.stdout_lines | length > 0
+      ignore_errors: yes
+
+    # 4. 清理残留的 iptables 规则
+    - name: Flush Docker iptables chains
+      shell: |
+        iptables -t nat -F DOCKER 2>/dev/null || true
+        iptables -t nat -X DOCKER 2>/dev/null || true
+        iptables -F DOCKER 2>/dev/null || true
+        iptables -F DOCKER-USER 2>/dev/null || true
+        iptables -F DOCKER-ISOLATION-STAGE-1 2>/dev/null || true
+        iptables -F DOCKER-ISOLATION-STAGE-2 2>/dev/null || true
+        iptables -X DOCKER 2>/dev/null || true
+        iptables -X DOCKER-USER 2>/dev/null || true
+        iptables -X DOCKER-ISOLATION-STAGE-1 2>/dev/null || true
+        iptables -X DOCKER-ISOLATION-STAGE-2 2>/dev/null || true
+      changed_when: false
+      ignore_errors: yes
+
+    # 5. 清理默认数据目录（如果存在）
     - name: Remove default Docker directories
       file:
         path: "{{ item }}"
@@ -50,7 +81,7 @@
         - /var/lib/containerd
       ignore_errors: yes
 
-    # 4. 清理配置文件
+    # 6. 清理配置文件
     - name: Remove Docker config
       file:
         path: /etc/docker/daemon.json
@@ -63,6 +94,7 @@
           - "✅ Docker 已完全卸载"
           - ""
           - "{% if docker_data_dir.stat.exists %}📦 数据已备份到: {{ backup_path }}{% else %}ℹ️  无数据需要备份{% endif %}"
+          - "{% if docker_bridges.stdout_lines | length > 0 %}🌉 已清理网桥: {{ docker_bridges.stdout_lines | join(', ') }}{% endif %}"
           - ""
           - "下一步："
           - "  mise run server-update  # 重新安装和配置 Docker"
