@@ -10,7 +10,7 @@
   tasks:
     - name: Query all preview databases
       shell: |
-        docker exec postgres psql -U postgres -t -A -F'|' -c "
+        cd /srv/studio/infra-apps/postgres && docker compose exec -T postgres psql -U postgres -t -A -F'|' -c "
         SELECT
           d.datname,
           pg_catalog.shobj_description(d.oid, 'pg_database') as comment,
