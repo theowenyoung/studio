@@ -252,6 +252,13 @@ jobs:
         run: |
           ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
+      # 确保数据库存在（幂等操作）
+      - name: Ensure database exists (db-admin)
+        run: |
+          mise run deploy-db-admin
+        env:
+          ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/id_rsa
+
       # 部署服务
       - name: Deploy ${{ matrix.service }}
         run: |
