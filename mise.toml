@@ -323,6 +323,10 @@ run = "bash js-apps/blog/build.sh"
 description = "Build storefront application"
 run = "bash js-apps/storefront/build.sh"
 
+[tasks.build-api]
+description = "Build api application"
+run = "bash js-apps/api/build.sh"
+
 # External 应用构建
 [tasks.build-meilisearch]
 description = "Build meilisearch"
@@ -366,7 +370,7 @@ run = "bash scripts/deploy-infra.sh backup"
 # JS 应用部署（智能检测环境：main=production, 其他=preview）
 [tasks.deploy-apps]
 description = "Deploy all applications"
-run = ["mise run deploy-hono-demo", "mise run deploy-proxy", "mise run deploy-blog", "mise run deploy-storefront", "mise run deploy-meilisearch", "mise run deploy-owen-blog"]
+run = ["mise run deploy-hono-demo", "mise run deploy-proxy", "mise run deploy-blog", "mise run deploy-storefront", "mise run deploy-meilisearch", "mise run deploy-ai","mise run deploy-owen-blog"]
 
 [tasks.deploy-hono-demo]
 description = "Deploy hono-demo (auto-detect environment)"
@@ -391,6 +395,7 @@ run = "bash scripts/deploy-app.sh storefront"
 
 [tasks.deploy-api]
 description = "Deploy api (auto-detect environment)"
+depends = ["build-api"]
 run = "bash scripts/deploy-app.sh api"
 
 # External 应用部署

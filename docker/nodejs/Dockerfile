@@ -32,8 +32,9 @@ COPY . .
 # 安装依赖（会自动安装正确平台的可选依赖）
 RUN pnpm -w install --frozen-lockfile
 
-# 构建目标子包
-RUN pnpm -w --filter "./${APP_PATH}" run ${BUILD_SCRIPT}
+# 构建目标应用及其所有 workspace 依赖（按拓扑顺序）
+# 注意：{path}... 表示包及其依赖，...{path} 表示包及其被依赖者
+RUN pnpm -w --filter "{./${APP_PATH}}..." run ${BUILD_SCRIPT}
 
 # 导出生产运行所需的独立产物（包含 node_modules、package.json、dist 等）
 # 需要 pnpm v8.15+/v9（corepack 通常会给到较新版本）
@@ -46,6 +47,10 @@ RUN node -p "require('./package.json').packageManager.replace('pnpm@', '')" > /t
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+
+# 启动命令（通过构建参数传入，必须在 FROM 之后立即声明）
+ARG START_CMD="node dist/server/index.js"
+ENV START_CMD=${START_CMD}
 
 # 安装运行时依赖
 RUN apk add --no-cache bash postgresql-client
@@ -67,5 +72,5 @@ COPY --from=builder /repo/scripts /scripts
 ARG EXPOSE_PORT=3000
 EXPOSE ${EXPOSE_PORT}
 
-# 默认启动命令（会被 docker-compose.yml 的 command 覆盖）
-CMD ["node", "dist/server/index.js"]
+# 启动命令（使用 shell 形式以展开环境变量）
+CMD sh -c "$START_CMD"
