@@ -215,7 +215,7 @@ mr db-restore-s3
 #### 3. 部署应用
 
 ```bash
-# 是否已经创建数据库？如果没有，执行下面的命令
+# 是否已经创建数据库？如果没有，执行下面的命令(注意，每次切换分支，都需要执行一下 mr deploy-db-admin, 用于创建数据库)
 mr deploy-db-admin
 # 后端应用（Docker 容器 + 零停机）
 mr deploy-hono
