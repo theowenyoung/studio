@@ -21,11 +21,14 @@
         mode: '0755'
 
     # ===== Sync files =====
+    # Note: exclude preview/ to preserve dynamically generated preview configs
     - name: Sync deploy-dist to server
       synchronize:
         src: "{{ local_dist }}/"
         dest: "{{ remote_dir }}/"
         delete: yes
+        rsync_opts:
+          - "--exclude=config/preview/*"
 
     # ===== Docker operations =====
     - name: Login to ECR
