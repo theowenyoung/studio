@@ -167,7 +167,18 @@ detect_environment() {
     return 0
   fi
 
-  local current_branch=$(git rev-parse --abbrev-ref HEAD)
+  # 检测分支名（支持 CI 环境）
+  local current_branch
+  if [ -n "${GITHUB_HEAD_REF:-}" ]; then
+    # GitHub Actions PR: GITHUB_HEAD_REF 是源分支名
+    current_branch="$GITHUB_HEAD_REF"
+  elif [ -n "${GITHUB_REF_NAME:-}" ]; then
+    # GitHub Actions push: GITHUB_REF_NAME 是分支名
+    current_branch="$GITHUB_REF_NAME"
+  else
+    # 本地开发
+    current_branch=$(git rev-parse --abbrev-ref HEAD)
+  fi
   export CURRENT_BRANCH="$current_branch"
 
   # 清洗分支名，用于生成后缀

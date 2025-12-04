@@ -7,6 +7,12 @@ on:
       - 'js-apps/**'
       - 'js-packages/**'
 
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'js-apps/**'
+      - 'js-packages/**'
+
   workflow_dispatch:
     inputs:
       target:
@@ -32,10 +38,35 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      deploy_env: ${{ steps.set-env.outputs.deploy_env }}
+      branch_clean: ${{ steps.set-env.outputs.branch_clean }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # 获取完整历史，以便 git diff 能找到 before commit
+
+      # 确定部署环境
+      - name: Determine deployment environment
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BRANCH="${{ github.head_ref }}"
+            DEPLOY_ENV="preview"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            BRANCH="main"
+            DEPLOY_ENV="prod"
+          else
+            BRANCH="${{ github.ref_name }}"
+            DEPLOY_ENV="preview"
+          fi
+
+          # 清洗分支名
+          BRANCH_CLEAN=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9-]/-/g' | tr '[:upper:]' '[:lower:]' | cut -c1-30)
+
+          echo "deploy_env=$DEPLOY_ENV" >> $GITHUB_OUTPUT
+          echo "branch_clean=$BRANCH_CLEAN" >> $GITHUB_OUTPUT
+          echo "Deploy environment: $DEPLOY_ENV"
+          echo "Branch: $BRANCH (clean: $BRANCH_CLEAN)"
 
       # 检测变更的服务（使用 git diff）
       - name: Detect changed services
@@ -46,7 +77,10 @@ jobs:
           echo "All services: $ALL_SERVICES"
 
           # 获取变更的文件
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # PR: 比较 base 和 head
+            CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...${{ github.head_ref }} 2>/dev/null || git diff --name-only HEAD~1 HEAD)
+          elif [ "${{ github.event_name }}" = "push" ]; then
             CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
           else
             # workflow_dispatch: 比较最近两次 commit
@@ -101,7 +135,7 @@ jobs:
               DEPLOY_SERVICES="$TARGET"
             fi
           else
-            # Push 事件：自动检测
+            # Push 或 PR 事件：自动检测
             if [ "$SHARED_CHANGED" = "true" ]; then
               DEPLOY_SERVICES="$ALL_SERVICES"
               echo "Shared packages changed, deploying all services"
@@ -135,6 +169,8 @@ jobs:
     strategy:
       matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
       fail-fast: false
+    outputs:
+      deployed_services: ${{ steps.collect.outputs.services }}
 
     steps:
       - uses: actions/checkout@v4
@@ -180,10 +216,17 @@ jobs:
         run: |
           echo "Loading configuration from AWS Parameter Store..."
 
+          # 根据环境选择配置路径
+          if [ "${{ needs.detect.outputs.deploy_env }}" = "prod" ]; then
+            PARAM_PATH="/studio-prod/"
+          else
+            PARAM_PATH="/studio-dev/"
+          fi
+
           # 读取部署配置
-          DEPLOY_HOST=$(aws ssm get-parameter --name "/studio-prod/DEPLOY_HOST" --query "Parameter.Value" --output text)
-          DEPLOY_USER=$(aws ssm get-parameter --name "/studio-prod/DEPLOY_USER" --query "Parameter.Value" --output text)
-          DEPLOY_SSH_KEY=$(aws ssm get-parameter --name "/studio-prod/DEPLOY_SSH_KEY" --with-decryption --query "Parameter.Value" --output text)
+          DEPLOY_HOST=$(aws ssm get-parameter --name "${PARAM_PATH}DEPLOY_HOST" --query "Parameter.Value" --output text)
+          DEPLOY_USER=$(aws ssm get-parameter --name "${PARAM_PATH}DEPLOY_USER" --query "Parameter.Value" --output text)
+          DEPLOY_SSH_KEY=$(aws ssm get-parameter --name "${PARAM_PATH}DEPLOY_SSH_KEY" --with-decryption --query "Parameter.Value" --output text)
 
           echo "DEPLOY_HOST=${DEPLOY_HOST}" >> $GITHUB_ENV
           echo "DEPLOY_USER=${DEPLOY_USER}" >> $GITHUB_ENV
@@ -194,6 +237,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
 
           echo "✅ Configuration loaded successfully"
+          echo "   Environment: ${{ needs.detect.outputs.deploy_env }}"
           echo "   Host: ${DEPLOY_HOST}"
           echo "   User: ${DEPLOY_USER}"
 
@@ -208,7 +252,7 @@ jobs:
         run: |
           ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      # 部署服务（使用 repo 中的 inventory.yml + 环境变量指定 SSH key）
+      # 部署服务
       - name: Deploy ${{ matrix.service }}
         run: |
           mise run deploy-${{ matrix.service }}
@@ -217,13 +261,88 @@ jobs:
           BUILDKIT_PROGRESS: plain
           ANSIBLE_SSH_PRIVATE_KEY_FILE: ~/.ssh/id_rsa
 
-      # 部署结果通知（可选）
+      # 收集部署的服务（用于 PR 评论）
+      - name: Collect deployed service
+        id: collect
+        run: |
+          echo "services=${{ matrix.service }}" >> $GITHUB_OUTPUT
+
+      # 部署结果通知
       - name: Deployment summary
         if: always()
         run: |
           echo "### Deployment Result: ${{ matrix.service }} 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- Service: \`${{ matrix.service }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Environment: \`${{ needs.detect.outputs.deploy_env }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+  # PR 评论预览 URL
+  comment:
+    needs: [detect, deploy]
+    if: github.event_name == 'pull_request' && needs.detect.outputs.deploy_env == 'preview'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comment preview URLs on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branchClean = '${{ needs.detect.outputs.branch_clean }}';
+            const matrix = ${{ needs.detect.outputs.matrix }};
+            const services = matrix.include.map(item => item.service);
+
+            // 生成预览 URL 列表
+            const urls = services.map(service => {
+              const domain = `${branchClean}-${service}-preview.owenyoung.com`;
+              return `- **${service}**: https://${domain}`;
+            }).join('\n');
+
+            const body = `## 🚀 Preview Deployment
+
+            Your changes have been deployed to the preview environment!
+
+            ### Preview URLs
+            ${urls}
+
+            ### Details
+            - **Branch**: \`${{ github.head_ref }}\`
+            - **Commit**: \`${{ github.sha }}\`
+            - **Environment**: preview
+
+            > ℹ️ Preview environments are automatically cleaned up when the PR is merged or closed.
+            > Use \`mise run preview-delete ${branchClean}\` to manually clean up.
+            `;
+
+            // 查找已有的评论
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+              comment.user.type === 'Bot' &&
+              comment.body.includes('Preview Deployment')
+            );
+
+            if (botComment) {
+              // 更新已有评论
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              // 创建新评论
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
