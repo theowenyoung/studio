@@ -389,6 +389,10 @@ description = "Deploy storefront (auto-detect environment)"
 depends = ["build-storefront"]
 run = "bash scripts/deploy-app.sh storefront"
 
+[tasks.deploy-api]
+description = "Deploy api (auto-detect environment)"
+run = "bash scripts/deploy-app.sh api"
+
 # External 应用部署
 [tasks.deploy-meilisearch]
 description = "Deploy meilisearch (auto-detect environment)"
