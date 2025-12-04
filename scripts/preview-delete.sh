@@ -2,11 +2,7 @@
 set -e
 
 # Preview environment deletion script
-# Deletes all resources for a specific preview branch:
-# - Docker containers
-# - Databases
-# - Caddy config files
-# - App directories
+# Uses double separator (-- for DNS, __ for DB) to find resources
 
 usage() {
   echo "Usage: $0 <branch-name> [-y|--yes]"
@@ -35,8 +31,9 @@ done
 SERVER="preview"
 INVENTORY="ansible/inventory.yml"
 
-# Normalize branch name
+# Normalize branch name (ensure hyphen format)
 BRANCH="${BRANCH//_/-}"
+# Convert to underscore for database matching
 BRANCH_UNDERSCORE="${BRANCH//-/_}"
 
 echo "🗑️  Preview Environment Deletion"
@@ -45,22 +42,22 @@ echo "   Branch: $BRANCH"
 echo ""
 echo "🔍 Finding resources..."
 
-# Find all resources on server
+# Find all resources on server using double separator patterns
 resources=$(ansible $SERVER -i $INVENTORY -m shell -a "
 BRANCH='$BRANCH'
 BRANCH_UNDERSCORE='$BRANCH_UNDERSCORE'
 
 echo '=== CONTAINERS ==='
-docker ps -a --format '{% raw %}{{.Names}}{% endraw %}' | grep -E \"[-]\${BRANCH}[-]\" || true
+docker ps -a --format '{% raw %}{{.Names}}{% endraw %}' | grep -E -- \"--\${BRANCH}-\" || true
 
 echo '=== DATABASES ==='
-cd /srv/studio/infra-apps/postgres && docker compose exec -T postgres psql -U postgres -t -A -c \"SELECT datname FROM pg_database WHERE datname LIKE '%_\${BRANCH_UNDERSCORE}'\" || true
+cd /srv/studio/infra-apps/postgres && docker compose exec -T postgres psql -U postgres -t -A -c \"SELECT datname FROM pg_database WHERE datname LIKE '%__\${BRANCH_UNDERSCORE}'\" || true
 
 echo '=== CADDY_CONFIGS ==='
-for f in /srv/studio/infra-apps/caddy/config/sites/*\${BRANCH}*.caddy; do [ -f \"\$f\" ] && basename \"\$f\"; done 2>/dev/null || true
+for f in /srv/studio/infra-apps/caddy/config/preview/*--\${BRANCH}.caddy; do [ -f \"\$f\" ] && basename \"\$f\"; done 2>/dev/null || true
 
 echo '=== APP_DIRS ==='
-for d in /srv/studio/js-apps/*-\${BRANCH}; do [ -d \"\$d\" ] && basename \"\$d\"; done 2>/dev/null || true
+for d in /srv/studio/js-apps/*--\${BRANCH}; do [ -d \"\$d\" ] && basename \"\$d\"; done 2>/dev/null || true
 " 2>/dev/null | grep -v "^$SERVER |" || true)
 
 # Parse resources
@@ -112,23 +109,23 @@ BRANCH_UNDERSCORE='$BRANCH_UNDERSCORE'
 
 # 1. Stop and remove containers
 echo '>>> Removing containers...'
-docker ps -a --format '{% raw %}{{.Names}}{% endraw %}' | grep -E \"[-]\${BRANCH}[-]\" | xargs -r docker rm -f || true
+docker ps -a --format '{% raw %}{{.Names}}{% endraw %}' | grep -E -- \"--\${BRANCH}-\" | xargs -r docker rm -f || true
 
 # 2. Drop databases
 echo '>>> Dropping databases...'
 cd /srv/studio/infra-apps/postgres
-for db in \$(docker compose exec -T postgres psql -U postgres -t -A -c \"SELECT datname FROM pg_database WHERE datname LIKE '%_\${BRANCH_UNDERSCORE}'\"); do
+for db in \$(docker compose exec -T postgres psql -U postgres -t -A -c \"SELECT datname FROM pg_database WHERE datname LIKE '%__\${BRANCH_UNDERSCORE}'\"); do
   echo \"   Dropping: \$db\"
   docker compose exec -T postgres psql -U postgres -c \"DROP DATABASE IF EXISTS \\\"\$db\\\"\" || true
 done
 
 # 3. Remove Caddy configs
 echo '>>> Removing Caddy configs...'
-rm -fv /srv/studio/infra-apps/caddy/config/sites/*\${BRANCH}*.caddy || true
+rm -fv /srv/studio/infra-apps/caddy/config/preview/*--\${BRANCH}.caddy || true
 
 # 4. Remove app directories
 echo '>>> Removing app directories...'
-rm -rfv /srv/studio/js-apps/*-\${BRANCH} || true
+rm -rfv /srv/studio/js-apps/*--\${BRANCH} || true
 
 # 5. Reload Caddy
 echo '>>> Reloading Caddy...'

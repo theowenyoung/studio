@@ -22,12 +22,11 @@ cd "js-apps/$SERVICE_BASE" || cd "infra-apps/$SERVICE_BASE" || cd "external-apps
 detect_environment
 
 # Generate resource names using CTX_* variables (same logic as .env.example)
+# Preview 环境使用双分隔符 (-- 和 __) 便于解析
 if [ "$DEPLOY_ENV" = "preview" ]; then
-    SERVICE_NAME="${SERVICE_BASE}-${BRANCH_CLEAN}"
-    DATABASE_NAME=$(echo "${SERVICE_BASE}" | tr '-' '_')"_${BRANCH_CLEAN//-/_}"
-    # 域名格式: hono-demo-feat-test-preview.preview.owenyoung.com
-    # 与 .env.example 中 APP_URL 模板保持一致
-    DOMAIN="${SERVICE_BASE}-${BRANCH_CLEAN}.preview.owenyoung.com"
+    SERVICE_NAME="${SERVICE_BASE}--${BRANCH_CLEAN}"
+    DATABASE_NAME=$(echo "${SERVICE_BASE}" | tr '-' '_')"__${BRANCH_CLEAN//-/_}"
+    DOMAIN="${SERVICE_BASE}--${BRANCH_CLEAN}.preview.owenyoung.com"
 else
     SERVICE_NAME="${SERVICE_BASE}"
     DATABASE_NAME=$(echo "${SERVICE_BASE}" | tr '-' '_')

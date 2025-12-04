@@ -69,10 +69,11 @@ Uses `psenv` (Rust tool) for two-phase template rendering:
 - Local dev: omitted `CTX_*` vars use localhost defaults
 
 ### Preview Environment Isolation
-Each feature branch gets isolated resources:
-- Database: `feat-auth` -> `hono_demo_feat_auth`
-- Domain: `feat-auth` -> `https://hono-demo-feat-auth.preview.owenyoung.com`
-- Container: `feat-auth` -> `preview-feat-auth-hono-demo`
+Each feature branch gets isolated resources (uses double separators for easy parsing):
+- Database: `feat-auth` -> `hono_demo__feat_auth` (double underscore)
+- Domain: `feat-auth` -> `https://hono-demo--feat-auth.preview.owenyoung.com` (double hyphen)
+- Container: `feat-auth` -> `hono-demo--feat-auth-hono-demo-1`
+- App dir: `feat-auth` -> `/srv/studio/js-apps/hono-demo--feat-auth`
 
 ## Tech Stack
 - **Runtime**: Node.js 22+, pnpm 8.15.6

@@ -28,10 +28,11 @@ studio-new/
 
 ### Preview 环境隔离
 
-每个功能分支都有独立的预览环境：
-- **数据库隔离**: 分支 `feat-auth` → 数据库 `hono_demo_feat_auth`
-- **域名隔离**: 分支 `feat-auth` → `https://hono-demo-feat-auth.preview.owenyoung.com`
-- **容器隔离**: 分支 `feat-auth` → 容器 `preview-feat-auth-hono-demo`
+每个功能分支都有独立的预览环境（使用双分隔符便于解析）：
+- **数据库隔离**: 分支 `feat-auth` → 数据库 `hono_demo__feat_auth`（双下划线）
+- **域名隔离**: 分支 `feat-auth` → `https://hono-demo--feat-auth.preview.owenyoung.com`（双中划线）
+- **容器隔离**: 分支 `feat-auth` → 容器 `hono-demo--feat-auth-hono-demo-1`
+- **目录隔离**: 分支 `feat-auth` → `/srv/studio/js-apps/hono-demo--feat-auth`
 
 ### 环境变量模板渲染
 

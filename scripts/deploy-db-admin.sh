@@ -25,8 +25,8 @@ elif [ "$FORCE_ENV" = "preview" ]; then
 
   export DEPLOY_ENV="preview"
   export AWS_PARAM_PATH="/studio-dev/"
-  export CTX_DB_SUFFIX="_${BRANCH_CLEAN//-/_}"
-  export CTX_DNS_SUFFIX="-${BRANCH_CLEAN}"
+  export CTX_DB_SUFFIX="__${BRANCH_CLEAN//-/_}"
+  export CTX_DNS_SUFFIX="--${BRANCH_CLEAN}"
   export CTX_ROOT_DOMAIN="preview.owenyoung.com"
 
   echo "🚀 Deploying db-admin to PREVIEW (forced)..."
