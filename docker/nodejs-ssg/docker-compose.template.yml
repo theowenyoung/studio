@@ -1,5 +1,5 @@
 services:
-  ${SERVICE_NAME}:
+  ${DOCKER_SERVICE_NAME}:
     image: ${IMAGE_TAG}
     restart: unless-stopped
     networks:

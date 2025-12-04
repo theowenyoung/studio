@@ -1,6 +1,6 @@
 services:
   # 应用服务
-  api:
+  ${DOCKER_SERVICE_NAME}:
     image: ${IMAGE_TAG}
     restart: unless-stopped
     env_file: .env

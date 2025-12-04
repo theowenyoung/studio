@@ -186,6 +186,7 @@ detect_environment() {
   export DEPLOY_TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
 
   # 服务名：从当前目录名推断（monorepo 约定）
+  # 注意：这可能不准确，build.sh 应该在调用后设置正确的 SERVICE_BASE
   export CTX_SERVICE_NAME=$(basename "$PWD")
 
   if [ "$current_branch" = "main" ]; then
@@ -255,4 +256,19 @@ get_image_tag() {
       echo "prod-${DEPLOY_TIMESTAMP}"
     fi
   fi
+}
+
+# ===== 设置 Docker 服务名 =====
+# 必须在 detect_environment 之后调用，传入服务基础名
+# 用法: set_docker_service_name "hono-demo"
+set_docker_service_name() {
+  local service_base="$1"
+
+  if [ "$DEPLOY_ENV" = "preview" ]; then
+    export DOCKER_SERVICE_NAME="${service_base}--${BRANCH_CLEAN}"
+  else
+    export DOCKER_SERVICE_NAME="$service_base"
+  fi
+
+  echo "🐳 Docker Service: $DOCKER_SERVICE_NAME"
 }

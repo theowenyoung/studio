@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/../../scripts/build-lib.sh"
 detect_environment
 
 SERVICE_NAME="storefront"
+set_docker_service_name "$SERVICE_NAME"
 APP_PATH="js-apps/storefront"
 VERSION="$(get_version)"
 
@@ -27,8 +28,8 @@ rm -rf "$SCRIPT_DIR/$DEPLOY_DIST"
 mkdir -p "$SCRIPT_DIR/$DEPLOY_DIST"
 
 # ===== 3. 生成 docker-compose.yml（使用模板 + envsubst） =====
-export SERVICE_NAME
 export IMAGE_TAG="$IMAGE_TAG_VERSIONED"
+# DOCKER_SERVICE_NAME 已由 detect_environment 导出
 
 envsubst < "$SCRIPT_DIR/../../docker/nodejs-ssg/docker-compose.template.yml" > "$SCRIPT_DIR/$DEPLOY_DIST/docker-compose.yml"
 

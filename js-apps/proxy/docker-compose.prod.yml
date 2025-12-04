@@ -1,6 +1,6 @@
 services:
   # 代理服务
-  proxy:
+  ${DOCKER_SERVICE_NAME}:
     image: ${IMAGE_TAG}
     restart: unless-stopped
     env_file: .env

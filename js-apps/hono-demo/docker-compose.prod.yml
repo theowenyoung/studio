@@ -1,6 +1,6 @@
 services:
   # 数据库迁移服务（一次性任务）
-  hono-demo-migrate:
+  ${DOCKER_SERVICE_NAME}-migrate:
     image: ${IMAGE_TAG}
     env_file: .env
     networks:
@@ -11,7 +11,7 @@ services:
       - migrate
 
   # 应用服务
-  hono-demo:
+  ${DOCKER_SERVICE_NAME}:
     image: ${IMAGE_TAG}
     restart: unless-stopped
     env_file: .env
