@@ -1,0 +1,49 @@
+---
+- name: List Preview Environments
+  hosts: preview_servers
+  gather_facts: yes
+
+  tasks:
+    - name: Get all running containers
+      shell: |
+        docker ps --format '{% raw %}{{.Names}}\t{{.Status}}\t{{.Image}}{% endraw %}' | sort
+      register: containers
+      changed_when: false
+
+    - name: Get all preview app directories
+      shell: |
+        find /srv/studio/js-apps -maxdepth 2 -name "current" -type l 2>/dev/null | while read link; do
+          app_dir=$(dirname "$link")
+          app_name=$(basename "$app_dir")
+          version=$(basename "$(readlink -f "$link")" 2>/dev/null || echo "unknown")
+          echo "$app_name|$version"
+        done | sort
+      register: app_dirs
+      changed_when: false
+
+    - name: Display preview environments
+      debug:
+        msg: |
+
+          🐳 Running Containers on {{ inventory_hostname }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          {{ "%-40s %-25s %s" | format("Container", "Status", "Image") }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          {% for line in containers.stdout_lines %}
+          {% set parts = line.split('\t') %}
+          {{ "%-40s %-25s %s" | format(parts[0], parts[1] | default(''), parts[2] | default('')) }}
+          {% endfor %}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+          📦 Deployed Apps
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          {{ "%-40s %s" | format("App", "Version") }}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          {% for line in app_dirs.stdout_lines %}
+          {% set parts = line.split('|') %}
+          {{ "%-40s %s" | format(parts[0], parts[1] | default('unknown')) }}
+          {% endfor %}
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+          Total containers: {{ containers.stdout_lines | length }}
+          Total apps: {{ app_dirs.stdout_lines | length }}
