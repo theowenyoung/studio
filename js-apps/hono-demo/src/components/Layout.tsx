@@ -27,7 +27,7 @@ export const Layout = (
         </header>
         ${props.children}
         <footer>
-          <p>Built with love 2025 <a href="https://github.com/honojs/hono">Hono</a></p>
+          <p>Built with love 2029 <a href="https://github.com/honojs/hono">Hono</a></p>
         </footer>
         <script type="module" src="/static/js/datastar.js"></script>
       </body>
