@@ -1,0 +1,28 @@
+services:
+  db-admin:
+    image: postgres:18-alpine
+    restart: "no"  # One-time task, do not auto-restart
+    env_file:
+      - .env
+    command: ["/scripts/run-migrations.sh"]
+    environment:
+      # PostgreSQL connection information
+      PGHOST: ${POSTGRES_HOST:-postgres}
+      PGPORT: ${POSTGRES_PORT:-5432}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: postgres
+    volumes:
+      # Mount scripts directory (read-only)
+      - ./scripts:/scripts:ro
+      # Mount migrations directory (read-only)
+      - ./migrations:/migrations:ro
+    working_dir: /migrations
+    networks:
+      - shared
+
+networks:
+  shared:
+    # Use external shared network
+    # This network should be created by infra-apps/postgres
+    external: true

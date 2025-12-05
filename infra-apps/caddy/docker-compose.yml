@@ -1,0 +1,25 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    volumes:
+      # Caddyfile 配置
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      
+      # 本地证书
+      - ./.local/certs:/certs:ro
+      
+      # 持久化数据和配置
+      - ./.local/data:/data
+      - ./.local/config:/config
+    networks:
+      - shared
+
+networks:
+  shared:
+    driver: bridge
+    external: true

@@ -1,0 +1,600 @@
+[tools]
+python = "3.12"
+node = "lts"
+rust = "1.83"
+"cargo:psenv" = "0.5.0"
+zola = "0.19"
+
+[env]
+# AWS ECR registry
+ECR_REGISTRY = "912951144733.dkr.ecr.us-west-2.amazonaws.com"
+
+# ==================== 开发相关 (dev-) ====================
+# 开发服务器 + 本地 Docker + 环境变量
+
+[tasks.dev-hono]
+description = "Start hono-demo development server"
+run = 'pnpm --filter "hono-demo" dev'
+
+[tasks.dev-proxy]
+description = "Start proxy development server"
+run = 'pnpm --filter "proxy" dev'
+
+[tasks.dev-api]
+description = "Start api development server"
+run = 'pnpm --filter "api" dev'
+
+[tasks.dev-meilisearch]
+description = "Start meilisearch service"
+run = 'docker compose up'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-all]
+description = "Start all development servers"
+alias = "dev"
+run = 'pnpm --parallel --filter "./js-apps/*" dev'
+
+[tasks.dev-kill]
+description = "Kill all development servers (cleanup after Ctrl+C)"
+run = '''
+echo "🔪 Killing all development servers..."
+# 杀死常见的开发服务器进程
+pkill -f "vite" || true
+pkill -f "remix dev" || true
+pkill -f "next dev" || true
+pkill -f "node.*dev" || true
+pkill -f "tsx watch" || true
+# 杀死占用常见开发端口的进程
+lsof -ti:3000,3001,5173,8001,8002,8003,9001,9002,9003 | xargs kill -9 2>/dev/null || true
+echo "✅ All development servers killed"
+'''
+
+[tasks.dev-init]
+description = "Initialize local environment (create Docker network)"
+alias = "init"
+run = 'docker network create shared'
+
+[tasks.dev-up]
+description = "Start all local infrastructure"
+alias = "up"
+depends = ["dev-up-postgres", "dev-up-redis", "dev-up-caddy", "dev-up-meilisearch"]
+
+[tasks.dev-down]
+description = "Stop all local infrastructure"
+alias = "down"
+depends = ["dev-down-postgres", "dev-down-redis", "dev-down-caddy", "dev-down-meilisearch"]
+
+[tasks.dev-clean-docker]
+description = "Clean all local Docker containers and volumes (DESTRUCTIVE)"
+alias = "clean-docker"
+run = '''
+#!/bin/bash
+set -e
+
+echo "⚠️  WARNING: This will DELETE all local Docker data!"
+echo ""
+echo "This will:"
+echo "  • Stop all infrastructure containers (postgres, redis, caddy, meilisearch)"
+echo "  • Remove all containers"
+echo "  • Remove all volumes (databases, cache, logs)"
+echo ""
+echo "💡 You will need to run 'mise run init' and 'mise run db-init' after this"
+echo ""
+read -p "Are you sure? Type 'yes' to continue: " confirm
+
+if [ "$confirm" != "yes" ]; then
+    echo "Aborted."
+    exit 0
+fi
+
+echo ""
+echo "🧹 Cleaning local Docker environment..."
+echo ""
+
+# Stop all services
+echo "1. Stopping all services..."
+mise run dev-down 2>/dev/null || true
+
+# Remove containers with volumes
+echo "2. Removing containers and volumes..."
+docker compose -f infra-apps/postgres/docker-compose.yml down -v 2>/dev/null || true
+docker compose -f infra-apps/redis/docker-compose.yml down -v 2>/dev/null || true
+docker compose -f infra-apps/caddy/docker-compose.yml down -v 2>/dev/null || true
+docker compose -f infra-apps/db-admin/docker-compose.yml down -v 2>/dev/null || true
+docker compose -f external-apps/meilisearch/docker-compose.yml down -v 2>/dev/null || true
+
+
+# Prune any dangling volumes
+echo "4. Pruning dangling volumes..."
+docker volume prune -f 2>/dev/null || true
+
+echo ""
+echo "✅ Local Docker environment cleaned!"
+echo ""
+echo "📋 Next steps:"
+echo "   mise run up          # Start infrastructure"
+echo "   mise run db-init     # Initialize database"
+echo "   mise run env         # Fetch environment variables"
+echo ""
+'''
+
+[tasks.dev-logs]
+description = "View logs from all local infrastructure services"
+alias = "logs"
+run = '''
+echo "Starting log tail for postgres, redis, and caddy..."
+echo "Press Ctrl+C to stop"
+echo ""
+docker compose -f infra-apps/postgres/docker-compose.yml -f infra-apps/redis/docker-compose.yml -f infra-apps/caddy/docker-compose.yml logs -f --tail=50
+'''
+
+[tasks.dev-logs-postgres]
+description = "View PostgreSQL logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/postgres"
+
+[tasks.dev-logs-redis]
+description = "View Redis logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/redis"
+
+[tasks.dev-logs-caddy]
+description = "View Caddy logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/caddy"
+
+[tasks.dev-up-postgres]
+description = "Start local PostgreSQL"
+run = 'docker compose up -d --remove-orphans'
+dir = "infra-apps/postgres"
+
+[tasks.dev-up-redis]
+description = "Start local Redis"
+run = 'docker compose up -d --remove-orphans'
+dir = "infra-apps/redis"
+
+[tasks.dev-up-caddy]
+description = "Start local Caddy"
+run = 'docker compose up -d --remove-orphans'
+dir = "infra-apps/caddy"
+
+[tasks.dev-down-postgres]
+description = "Stop local PostgreSQL"
+run = 'docker compose down'
+dir = "infra-apps/postgres"
+
+[tasks.dev-down-redis]
+description = "Stop local Redis"
+run = 'docker compose down'
+dir = "infra-apps/redis"
+
+[tasks.dev-down-caddy]
+description = "Stop local Caddy"
+run = 'docker compose down'
+dir = "infra-apps/caddy"
+
+[tasks.dev-up-meilisearch]
+description = "Start local Meilisearch"
+run = 'docker compose up -d --remove-orphans'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-down-meilisearch]
+description = "Stop local Meilisearch"
+run = 'docker compose down'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-logs-meilisearch]
+description = "View Meilisearch logs"
+run = 'docker compose logs -f --tail=100'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-env]
+description = "Fetch all development environment variables"
+alias = "env"
+depends = ["dev-env-postgres", "dev-env-redis", "dev-env-db-admin","dev-env-hono", "dev-env-backup", "dev-env-admin", "dev-env-meilisearch","dev-env-api"]
+
+[tasks.dev-env-postgres]
+description = "Fetch PostgreSQL dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/postgres"
+
+[tasks.dev-env-db-admin]
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/db-admin"
+
+[tasks.dev-env-redis]
+description = "Fetch Redis dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/redis"
+
+
+[tasks.dev-env-api]
+description = "Fetch api dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "js-apps/api"
+
+[tasks.dev-env-hono]
+description = "Fetch hono-demo dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "js-apps/hono-demo"
+
+[tasks.dev-env-backup]
+description = "Fetch backup dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/backup"
+
+[tasks.dev-env-admin]
+description = "Fetch db-admin dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "infra-apps/db-admin"
+
+[tasks.dev-env-meilisearch]
+description = "Fetch meilisearch dev environment variables"
+run = 'psenv -t .env.example -p "/studio-dev/" -o .env'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-backup]
+description = "Run backup in dev environment"
+run = 'docker compose run --rm backup /usr/local/bin/backup-all.sh'
+dir = "infra-apps/backup"
+
+# ==================== 数据库操作 (db-) ====================
+
+[tasks.db-connect]
+description = "Connect to PostgreSQL database"
+alias = "db"
+run = 'docker compose exec postgres psql -U postgres'
+dir = "infra-apps/postgres"
+
+[tasks.dev-db-admin]
+description = "Initialize database (run admin migrations)"
+run = "docker compose run --rm db-admin"
+dir = "infra-apps/db-admin"
+
+[tasks.db-init-prod-mode]
+description = "Initialize local database with production-like setup"
+run = '''
+#!/bin/bash
+echo "🔧 Initializing production-like local database..."
+echo ""
+echo "This will create:"
+echo "  - Individual users for each application"
+echo "  - Read-only users"
+echo "  - Proper permission isolation"
+echo ""
+read -p "Continue? (yes/no): " confirm
+
+if [ "$confirm" != "yes" ]; then
+    echo "Aborted."
+    exit 0
+fi
+
+# Run production migrations locally
+docker compose run --rm -e DEPLOY_ENV=prod db-admin
+echo ""
+echo "✅ Production-like database initialized!"
+echo "💡 Update your .env files to use production credentials"
+'''
+dir = "infra-apps/db-admin"
+
+[tasks.db-migrate]
+description = "Run all application migrations"
+run = 'pnpm --filter "./js-apps/*" migrate'
+
+[tasks.db-migrate-hono]
+description = "Run hono-demo migrations"
+run = 'pnpm --filter "./js-apps/hono-demo" migrate'
+
+# ==================== 构建 (build-) ====================
+
+# 基础设施构建
+[tasks.build-infra-postgres]
+description = "Build PostgreSQL infrastructure"
+run = "bash infra-apps/postgres/build.sh"
+
+[tasks.build-infra-redis]
+description = "Build Redis infrastructure"
+run = "bash infra-apps/redis/build.sh"
+
+[tasks.build-infra-caddy]
+description = "Build Caddy infrastructure"
+run = "bash infra-apps/caddy/build.sh"
+
+[tasks.build-infra-backup]
+description = "Build backup infrastructure"
+run = "bash infra-apps/backup/build.sh"
+
+# JS 应用构建
+[tasks.build-hono-demo]
+description = "Build hono-demo application"
+run = "bash js-apps/hono-demo/build.sh"
+
+[tasks.build-proxy]
+description = "Build proxy application"
+run = "bash js-apps/proxy/build.sh"
+
+[tasks.build-blog]
+description = "Build blog application"
+run = "bash js-apps/blog/build.sh"
+
+[tasks.build-storefront]
+description = "Build storefront application"
+run = "bash js-apps/storefront/build.sh"
+
+[tasks.build-api]
+description = "Build api application"
+run = "bash js-apps/api/build.sh"
+
+# External 应用构建
+[tasks.build-meilisearch]
+description = "Build meilisearch"
+run = "bash external-apps/meilisearch/build.sh"
+
+[tasks.build-owen-blog]
+description = "Build owen-blog"
+run = "bash external-apps/owen-blog/build.sh"
+
+# ==================== 部署 (deploy-) ====================
+
+# 基础设施部署
+[tasks.deploy-infra]
+description = "Deploy all infrastructure services (auto-detect environment from git branch)"
+run = "bash scripts/deploy-infra.sh all"
+
+[tasks.deploy-infra-postgres]
+description = "Deploy PostgreSQL (auto-detect environment)"
+run = "bash scripts/deploy-infra.sh postgres"
+alias = "deploy-postgres"
+
+[tasks.deploy-infra-redis]
+description = "Deploy Redis (auto-detect environment)"
+run = "bash scripts/deploy-infra.sh redis"
+alias = "deploy-redis"
+
+[tasks.deploy-infra-caddy]
+description = "Deploy Caddy (auto-detect environment)"
+run = "bash scripts/deploy-infra.sh caddy"
+alias = "deploy-caddy"
+
+[tasks.deploy-infra-caddy-reload]
+description = "Quick reload Caddy config (no build, only sync & reload)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy-reload.yml"
+alias = "reload-caddy"
+
+[tasks.deploy-infra-backup]
+description = "Deploy backup service (production only)"
+run = "bash scripts/deploy-infra.sh backup"
+
+# JS 应用部署（智能检测环境：main=production, 其他=preview）
+[tasks.deploy-apps]
+description = "Deploy all applications"
+run = ["mise run deploy-hono-demo", "mise run deploy-proxy", "mise run deploy-blog", "mise run deploy-storefront", "mise run deploy-meilisearch", "mise run deploy-ai","mise run deploy-owen-blog"]
+
+[tasks.deploy-hono-demo]
+description = "Deploy hono-demo (auto-detect environment)"
+depends = ["build-hono-demo"]
+run = "bash scripts/deploy-app.sh hono-demo"
+alias = "deploy-hono"
+
+[tasks.deploy-proxy]
+description = "Deploy proxy (auto-detect environment)"
+depends = ["build-proxy"]
+run = "bash scripts/deploy-app.sh proxy"
+
+[tasks.deploy-blog]
+description = "Deploy blog (auto-detect environment)"
+depends = ["build-blog"]
+run = "bash scripts/deploy-app.sh blog"
+
+[tasks.deploy-storefront]
+description = "Deploy storefront (auto-detect environment)"
+depends = ["build-storefront"]
+run = "bash scripts/deploy-app.sh storefront"
+
+[tasks.deploy-api]
+description = "Deploy api (auto-detect environment)"
+depends = ["build-api"]
+run = "bash scripts/deploy-app.sh api"
+
+# External 应用部署
+[tasks.deploy-meilisearch]
+description = "Deploy meilisearch (auto-detect environment)"
+run = "bash scripts/deploy-external-app.sh meilisearch"
+
+[tasks.deploy-owen-blog]
+description = "Deploy owen-blog (auto-detect environment)"
+run = "bash scripts/deploy-external-app.sh owen-blog"
+
+# 数据库迁移部署
+[tasks.deploy-db-admin]
+description = "Run database migrations (auto-detect environment from git branch)"
+run = "bash scripts/deploy-db-admin.sh"
+
+
+
+# ==================== 服务器管理 (server-) ====================
+#
+# 任务分类原则：
+#
+# 【第一类】严格分支绑定 (Strict Branch Binding)
+# - 规则：在 main 分支只能操作 Prod，在其他分支只能操作 Preview
+# - 包括：deploy-*, server-update, sync-config, server-configure-aws, backup, clean-docker
+# - 原因：这些操作会修改配置文件或同步代码，必须确保环境隔离
+#
+# 【第二类】显式指定目标 (Explicit Targeting)
+# - 规则：必须在任务名中明确指定 -prod/-preview 后缀
+# - 包括：server-init-*, server-resize-volume-*, ssh-*
+# - 原因：初始化/危险操作太重要，resize 频率极低，必须手动确认目标
+#
+# ====================
+
+# SSH 连接 (显式指定目标 - 只读操作)
+
+[tasks.ssh]
+description = "SSH to prod server and cd to /srv/studio"
+run = 'ssh -t deploy@5.78.126.18 "cd /srv/studio && exec bash -l"'
+alias = "ssh-prod"
+
+[tasks.ssh-preview]
+description = "SSH to preview server and cd to /srv/studio"
+run = 'ssh -t deploy@49.13.31.185 "cd /srv/studio && exec bash -l"'
+
+# 用脚本创建初始用户
+[tasks.server-init-user]
+description = "Create deploy user on server(s)"
+usage = '''
+arg "<ip>" var=#true
+flag "-u --user <user>" help="admin user" default="root" env="ADMIN_USER"
+'''
+run = '''
+for ip in ${usage_ip?}; do
+  rsync -chazP ./scripts/create-init-user.sh ${usage_user?}@$ip:
+  ssh ${usage_user?}@$ip 'bash create-init-user.sh'
+done
+'''
+
+
+# 服务器初始化 (显式指定目标 - 极度危险，必须手动确认)
+# 规则: 初始化操作太危险且频率极低，必须显式指定目标，不自动检测
+[tasks.server-init]
+description = "Initialize all servers (prod + preview) in parallel - DANGEROUS"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true"
+
+[tasks.server-init-prod]
+description = "Initialize prod server only (security, docker, directories, mise, aliases)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l prod"
+
+[tasks.server-init-preview]
+description = "Initialize preview server only (security, docker, directories, mise, aliases)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/init-server.yml -e force_system_update=true -l preview"
+
+# 服务器配置更新 (严格分支绑定，跳过系统更新)
+[tasks.server-update]
+description = "Update server configuration without system update (auto-detect target)"
+run = "bash scripts/server-operation.sh update init-server.yml"
+
+# 系统包更新 (单独执行，耗时较长)
+[tasks.server-apt-upgrade]
+description = "Run apt upgrade on server (slow, auto-detect target)"
+run = "bash scripts/server-operation.sh apt-upgrade init-server.yml force_system_update=true"
+
+# 同步服务器配置 (严格分支绑定)
+[tasks.sync-config]
+description = "Sync server-mise.toml and bash_aliases (auto-detect target: main→prod, other→preview)"
+run = "bash scripts/server-operation.sh sync-config sync-server-config.yml"
+
+# 配置 AWS 凭证 (严格分支绑定)
+[tasks.server-configure-aws]
+description = "Configure AWS credentials for ECR access (auto-detect target: main→prod, other→preview)"
+run = "bash scripts/server-operation.sh configure-aws configure-aws-credentials.yml"
+
+# 备份与恢复（通过 Ansible 触发）
+[tasks.server-backup]
+description = "Run backup (auto-detect environment, production only)"
+run = "bash scripts/server-operation.sh backup run-backup.yml"
+alias = "backup"
+
+# Volume 管理 (显式指定目标 - 危险操作)
+[tasks.server-resize-volume-prod]
+description = "Resize Hetzner volume on prod server (expand filesystem)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l prod"
+
+[tasks.server-resize-volume-preview]
+description = "Resize Hetzner volume on preview server (expand filesystem)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l preview"
+
+# Docker 数据清理（系统重建前备份）
+[tasks.server-clean-docker]
+description = "Clean Docker data (auto-detect environment, move to .old backup before rebuild)"
+run = "bash scripts/server-operation.sh clean-docker clean-docker.yml"
+alias = "clean-docker"
+
+# Note: 其他服务器运维任务（查看日志、恢复数据库、查看备份等）
+# 请 SSH 到服务器后使用 server-mise.toml 中定义的任务
+# 例如：mise ssh-studio 然后 mise run db-restore-local
+
+# ==================== 通用工具 (无前缀) ====================
+
+[tasks.lint]
+description = "Lint all projects"
+run = 'pnpm --filter "./js-apps/*" lint'
+
+[tasks.format]
+description = "Format code with Prettier"
+run = 'prettier --write "**/*.{ts,tsx,md}"'
+
+[tasks.test]
+description = "Run tests"
+run = 'pnpm --filter "./js-apps/*" test'
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = 'pnpm --filter "./js-apps/*" clean'
+
+[tasks.install]
+description = "Install dependencies"
+run = 'pnpm --filter "./js-apps/*" install'
+
+[tasks.build]
+description = "Build all projects"
+run = 'pnpm --filter "./js-apps/*" build'
+
+[tasks.serve]
+description = "Serve built applications"
+run = 'pnpm --filter "./js-apps/*" start'
+
+# ==================== 辅助工具 ====================
+
+[tasks.build-db-admin]
+description = "Build db-admin (prepare migrations)"
+run = "bash infra-apps/db-admin/build.sh"
+
+[tasks.build-psenv]
+description = "Build psenv Rust tool"
+run = 'cargo build --release'
+dir = "rust-packages/psenv"
+
+[tasks.release-psenv]
+description = "Publish psenv to crates.io"
+run = 'cargo publish'
+dir = "rust-packages/psenv"
+
+# ==================== AWS ECR 管理 ====================
+
+[tasks.ecr-setup-lifecycle]
+description = "Setup lifecycle policies for all ECR repositories"
+run = "bash scripts/setup-ecr-lifecycle.sh"
+alias = "ecr-lifecycle"
+
+# ==================== 动态任务 ====================
+
+[tasks.addjs]
+description = "Add package to a specific JS project"
+usage = '''
+arg "<project>"
+arg "[packages]" var=#true
+'''
+run = 'pnpm --filter "./js-apps/${usage_project?}" add ${usage_packages?}'
+
+[tasks.buildjs]
+description = "Run custom build command for a JS project"
+usage = '''
+arg "<project>"
+arg "[args]" var=#true
+'''
+run = 'pnpm --filter "./js-apps/${usage_project?}" ${usage_args?}'
+
+# ==================== 预览环境管理 ====================
+
+[tasks.preview-list]
+description = "List all preview environments (by branch)"
+alias = "previews"
+run = "bash scripts/preview-list.sh"
+
+[tasks.preview-delete]
+description = "Delete a preview environment by branch name"
+run = "bash scripts/preview-delete.sh ${usage_branch:-} ${usage_yes:+--yes}"
+usage = '''
+arg "<branch>" help="Branch name to delete (e.g., feat-test)"
+flag "-y --yes" help="Skip confirmation"
+'''

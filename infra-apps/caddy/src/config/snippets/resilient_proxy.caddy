@@ -1,0 +1,6 @@
+# ==================== Resilient Proxy ====================
+# 单服务器部署的弹性配置
+(resilient_proxy) {
+    # 基础反向代理配置
+    reverse_proxy {args[0]}
+}
