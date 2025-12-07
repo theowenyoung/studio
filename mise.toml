@@ -1,0 +1,663 @@
+[tools]
+python = "3.14"
+node = "lts"
+rust = "1.83"
+"cargo:psenv" = "0.5.0"
+"pipx:ansible-core" = "2"
+zola = "0.19"
+
+[env]
+# AWS ECR registry
+ECR_REGISTRY = "912951144733.dkr.ecr.us-west-2.amazonaws.com"
+
+# ==================== 开发相关 (dev-) ====================
+# 开发服务器 + 本地 Docker + 环境变量
+
+[tasks.dev-hono]
+description = "Start hono-demo development server"
+run = 'pnpm --filter "hono-demo" dev'
+
+[tasks.dev-hono-prod2]
+description = "Start hono-prod2-demo development server"
+run = 'pnpm --filter "hono-prod2-demo" dev'
+
+[tasks.dev-proxy]
+description = "Start proxy development server"
+run = 'pnpm --filter "proxy" dev'
+
+[tasks.dev-api]
+description = "Start api development server"
+run = 'pnpm --filter "api" dev'
+
+[tasks.dev-meilisearch]
+description = "Start meilisearch service"
+run = 'docker compose up'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-all]
+description = "Start all development servers"
+alias = "dev"
+run = 'pnpm --parallel --filter "./js-apps/*" dev'
+
+[tasks.dev-kill]
+description = "Kill all development servers (cleanup after Ctrl+C)"
+run = '''
+echo "🔪 Killing all development servers..."
+# 杀死常见的开发服务器进程
+pkill -f "vite" || true
+pkill -f "remix dev" || true
+pkill -f "next dev" || true
+pkill -f "node.*dev" || true
+pkill -f "tsx watch" || true
+# 杀死占用常见开发端口的进程
+lsof -ti:3000,3001,5173,8001,8002,8003,9001,9002,9003 | xargs kill -9 2>/dev/null || true
+echo "✅ All development servers killed"
+'''
+
+[tasks.dev-init]
+description = "Initialize local environment (create Docker network)"
+alias = "init"
+run = 'docker network create shared'
+
+[tasks.dev-up]
+description = "Start all local infrastructure"
+alias = "up"
+depends = ["dev-up-postgres", "dev-up-redis", "dev-up-caddy", "dev-up-meilisearch"]
+
+[tasks.dev-down]
+description = "Stop all local infrastructure"
+alias = "down"
+depends = ["dev-down-postgres", "dev-down-redis", "dev-down-caddy", "dev-down-meilisearch"]
+
+[tasks.dev-clean-docker]
+description = "Clean all local Docker containers and volumes (DESTRUCTIVE)"
+alias = "clean-docker"
+run = '''
+#!/bin/bash
+set -e
+
+echo "⚠️  WARNING: This will DELETE all local Docker data!"
+echo ""
+echo "This will:"
+echo "  • Stop all infrastructure containers (postgres, redis, caddy, meilisearch)"
+echo "  • Remove all containers"
+echo "  • Remove all volumes (databases, cache, logs)"
+echo ""
+echo "💡 You will need to run 'mise run init' and 'mise run dev-db-prepare' after this"
+echo ""
+read -p "Are you sure? Type 'yes' to continue: " confirm
+
+if [ "$confirm" != "yes" ]; then
+    echo "Aborted."
+    exit 0
+fi
+
+echo ""
+echo "🧹 Cleaning local Docker environment..."
+echo ""
+
+# Stop all services
+echo "1. Stopping all services..."
+mise run dev-down 2>/dev/null || true
+
+# Remove containers with volumes
+echo "2. Removing containers and volumes..."
+docker compose -f infra-apps/postgres/docker-compose.yml down -v 2>/dev/null || true
+docker compose -f infra-apps/redis/docker-compose.yml down -v 2>/dev/null || true
+docker compose -f infra-apps/caddy/docker-compose.yml down -v 2>/dev/null || true
+docker compose -f infra-apps/db-prepare/docker-compose.yml down -v 2>/dev/null || true
+docker compose -f external-apps/meilisearch/docker-compose.yml down -v 2>/dev/null || true
+
+
+# Prune any dangling volumes
+echo "4. Pruning dangling volumes..."
+docker volume prune -f 2>/dev/null || true
+
+echo ""
+echo "✅ Local Docker environment cleaned!"
+echo ""
+echo "📋 Next steps:"
+echo "   mise run up          # Start infrastructure"
+echo "   mise run dev-db-prepare     # Initialize database"
+echo "   mise run env         # Fetch environment variables"
+echo ""
+'''
+
+[tasks.dev-logs]
+description = "View logs from all local infrastructure services"
+alias = "logs"
+run = '''
+echo "Starting log tail for postgres, redis, and caddy..."
+echo "Press Ctrl+C to stop"
+echo ""
+docker compose -f infra-apps/postgres/docker-compose.yml -f infra-apps/redis/docker-compose.yml -f infra-apps/caddy/docker-compose.yml logs -f --tail=50
+'''
+
+[tasks.dev-logs-postgres]
+description = "View PostgreSQL logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/postgres"
+
+[tasks.dev-logs-redis]
+description = "View Redis logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/redis"
+
+[tasks.dev-logs-caddy]
+description = "View Caddy logs"
+run = 'docker compose logs -f --tail=100'
+dir = "infra-apps/caddy"
+
+[tasks.dev-up-postgres]
+description = "Start local PostgreSQL"
+run = 'docker compose up -d --remove-orphans'
+dir = "infra-apps/postgres"
+
+[tasks.dev-up-redis]
+description = "Start local Redis"
+run = 'docker compose up -d --remove-orphans'
+dir = "infra-apps/redis"
+
+[tasks.dev-up-caddy]
+description = "Start local Caddy"
+run = 'docker compose up -d --remove-orphans'
+dir = "infra-apps/caddy"
+
+[tasks.dev-down-postgres]
+description = "Stop local PostgreSQL"
+run = 'docker compose down'
+dir = "infra-apps/postgres"
+
+[tasks.dev-down-redis]
+description = "Stop local Redis"
+run = 'docker compose down'
+dir = "infra-apps/redis"
+
+[tasks.dev-down-caddy]
+description = "Stop local Caddy"
+run = 'docker compose down'
+dir = "infra-apps/caddy"
+
+[tasks.dev-up-meilisearch]
+description = "Start local Meilisearch"
+run = 'docker compose up -d --remove-orphans'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-down-meilisearch]
+description = "Stop local Meilisearch"
+run = 'docker compose down'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-logs-meilisearch]
+description = "View Meilisearch logs"
+run = 'docker compose logs -f --tail=100'
+dir = "external-apps/meilisearch"
+
+[tasks.dev-env]
+description = "Fetch all development environment variables (auto-detect apps with .env.example)"
+alias = "env"
+run = """
+echo "🔐 Fetching dev environment variables..."
+echo ""
+
+# Scan all app directories for .env.example
+for app_dir in js-apps/* infra-apps/* external-apps/*; do
+  if [ -f "$app_dir/.env.example" ]; then
+    app_name=$(basename "$app_dir")
+    parent_dir=$(dirname "$app_dir")
+    echo "📦 $parent_dir/$app_name"
+    psenv -t "$app_dir/.env.example" -p "/studio-dev/" -o "$app_dir/.env"
+  fi
+done
+
+echo ""
+echo "✅ All environment variables fetched!"
+"""
+
+[tasks.dev-backup]
+description = "Run backup in dev environment"
+run = 'docker compose run --rm backup /usr/local/bin/backup-all.sh'
+dir = "infra-apps/backup"
+
+# ==================== 数据库操作 (dev-db-) ====================
+
+[tasks.dev-db-connect]
+description = "Connect to PostgreSQL database"
+alias = "db"
+run = 'docker compose exec postgres psql -U postgres'
+dir = "infra-apps/postgres"
+
+[tasks.dev-db-prepare]
+description = "Initialize database (run admin migrations)"
+run = """
+# Build with all migrations to dist/ (local mode)
+# LOCAL_DEV=true forces /studio-dev/ params regardless of branch
+LOCAL_DEV=true TARGET_SERVER=local BUILD_OUTPUT_DIR=dist bash build.sh
+# Run from dist
+docker compose -f dist/docker-compose.yml run --rm db-prepare
+"""
+dir = "infra-apps/db-prepare"
+
+[tasks.dev-db-migrate]
+description = "Run all application migrations"
+run = 'pnpm --filter "./js-apps/*" migrate'
+
+[tasks.dev-db-migrate-hono]
+description = "Run hono-demo migrations"
+run = 'pnpm --filter "./js-apps/hono-demo" migrate'
+
+# ==================== 构建 (build-) ====================
+
+# 基础设施构建
+[tasks.build-postgres]
+description = "Build PostgreSQL infrastructure"
+run = "bash infra-apps/postgres/build.sh"
+
+[tasks.build-redis]
+description = "Build Redis infrastructure"
+run = "bash infra-apps/redis/build.sh"
+
+[tasks.build-caddy]
+description = "Build Caddy infrastructure"
+run = "bash infra-apps/caddy/build.sh"
+
+[tasks.build-backup]
+description = "Build backup infrastructure"
+run = "bash infra-apps/backup/build.sh"
+
+# JS 应用构建
+[tasks.build-hono-demo]
+description = "Build hono-demo application"
+run = "bash js-apps/hono-demo/build.sh"
+
+[tasks.build-hono-prod2-demo]
+description = "Build hono-prod2-demo application (deploys to prod2)"
+run = "bash js-apps/hono-prod2-demo/build.sh"
+
+[tasks.build-proxy]
+description = "Build proxy application"
+run = "bash js-apps/proxy/build.sh"
+
+[tasks.build-blog]
+description = "Build blog application"
+run = "bash js-apps/blog/build.sh"
+
+[tasks.build-storefront]
+description = "Build storefront application"
+run = "bash js-apps/storefront/build.sh"
+
+[tasks.build-api]
+description = "Build api application"
+run = "bash js-apps/api/build.sh"
+
+[tasks.build-admin]
+description = "Build admin application"
+run = "bash js-apps/admin/build.sh"
+
+# External 应用构建
+[tasks.build-meilisearch]
+description = "Build meilisearch"
+run = "bash external-apps/meilisearch/build.sh"
+
+[tasks.build-owen-blog]
+description = "Build owen-blog"
+run = "bash external-apps/owen-blog/build.sh"
+
+# ==================== 部署 (deploy-) ====================
+
+# 基础设施部署
+[tasks.deploy-infra]
+description = "Deploy all infrastructure services (auto-detect environment from git branch)"
+run = "bash scripts/deploy-infra.sh all"
+
+[tasks.deploy-postgres]
+description = "Deploy PostgreSQL (auto-detect environment)"
+run = "bash scripts/deploy-infra.sh postgres"
+
+[tasks.deploy-redis]
+description = "Deploy Redis (auto-detect environment)"
+run = "bash scripts/deploy-infra.sh redis"
+
+[tasks.deploy-caddy]
+description = "Deploy Caddy (auto-detect environment, specify server for prod)"
+usage = 'arg "[server]" help="Target server for prod: all (default), prod1, prod2" default=""'
+run = """
+if [ -n "${usage_server}" ]; then
+  bash scripts/deploy-infra.sh caddy --server="${usage_server}"
+else
+  bash scripts/deploy-infra.sh caddy
+fi
+"""
+
+[tasks.reload-caddy]
+description = "Build and reload Caddy config on target server"
+usage = 'arg "[server]" help="Target server: prod1, prod2, preview, or all" default=""'
+run = """
+#!/bin/bash
+set -e
+source scripts/build-lib.sh
+detect_environment
+
+TARGET="${usage_server}"
+
+if [ "$DEPLOY_ENV" = "prod" ]; then
+  if [ -z "$TARGET" ] || [ "$TARGET" = "all" ]; then
+    # Get active prod servers from inventory
+    SERVERS=$(grep -A 100 "prod_servers:" ansible/inventory.yml | grep -E "^\\s+prod[0-9]+:" | sed 's/://g' | awk '{print $1}')
+    for srv in $SERVERS; do
+      echo "🔄 Building and reloading Caddy for $srv..."
+      bash infra-apps/caddy/build.sh "$srv"
+      ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy-reload.yml -l "$srv"
+    done
+  else
+    echo "🔄 Building and reloading Caddy for $TARGET..."
+    bash infra-apps/caddy/build.sh "$TARGET"
+    ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy-reload.yml -l "$TARGET"
+  fi
+else
+  # Preview: no server-specific build needed
+  echo "🔄 Reloading Caddy for preview..."
+  bash infra-apps/caddy/build.sh
+  ansible-playbook -i ansible/inventory.yml ansible/playbooks/deploy-infra-caddy-reload.yml -l preview
+fi
+"""
+
+[tasks.deploy-backup]
+description = "Deploy backup service (production only)"
+run = "bash scripts/deploy-infra.sh backup"
+
+# JS 应用部署（智能检测环境：main=production, 其他=preview）
+[tasks.deploy-apps]
+description = "Deploy all applications"
+run = ["mise run deploy-hono-demo", "mise run deploy-proxy", "mise run deploy-blog", "mise run deploy-storefront", "mise run deploy-meilisearch", "mise run deploy-ai","mise run deploy-owen-blog"]
+
+[tasks.deploy-hono-demo]
+description = "Deploy hono-demo (auto-detect environment)"
+depends = ["build-hono-demo"]
+run = "bash scripts/deploy-app.sh hono-demo"
+alias = "deploy-hono"
+
+[tasks.deploy-hono-prod2-demo]
+description = "Deploy hono-prod2-demo to prod2 (auto-detect environment)"
+depends = ["build-hono-prod2-demo"]
+run = "bash scripts/deploy-app.sh hono-prod2-demo"
+
+[tasks.deploy-proxy]
+description = "Deploy proxy (auto-detect environment)"
+depends = ["build-proxy"]
+run = "bash scripts/deploy-app.sh proxy"
+
+[tasks.deploy-blog]
+description = "Deploy blog (auto-detect environment)"
+depends = ["build-blog"]
+run = "bash scripts/deploy-app.sh blog"
+
+[tasks.deploy-storefront]
+description = "Deploy storefront (auto-detect environment)"
+depends = ["build-storefront"]
+run = "bash scripts/deploy-app.sh storefront"
+
+[tasks.deploy-api]
+description = "Deploy api (auto-detect environment)"
+depends = ["build-api"]
+run = "bash scripts/deploy-app.sh api"
+
+[tasks.deploy-admin]
+description = "Deploy admin (auto-detect environment)"
+depends = ["build-admin"]
+run = "bash scripts/deploy-app.sh admin"
+
+# External 应用部署
+[tasks.deploy-meilisearch]
+description = "Deploy meilisearch (auto-detect environment)"
+run = "bash scripts/deploy-external-app.sh meilisearch"
+
+[tasks.deploy-owen-blog]
+description = "Deploy owen-blog (auto-detect environment)"
+run = "bash scripts/deploy-external-app.sh owen-blog"
+
+# 数据库迁移部署
+# 用法:
+#   mr deploy-db-prepare         # prod: 所有激活的服务器, preview: preview 服务器
+#   mr deploy-db-prepare prod2   # 指定单个服务器
+[tasks.deploy-db-prepare]
+description = "Run database migrations on all active prod servers or specific one"
+usage = 'arg "[server]" help="Target server: all (default for prod), prod1, prod2, etc." default=""'
+run = """
+#!/bin/bash
+set -e
+source scripts/build-lib.sh
+detect_environment
+
+TARGET="${usage_server}"
+
+if [ "$DEPLOY_ENV" = "prod" ]; then
+  if [ -z "$TARGET" ] || [ "$TARGET" = "all" ]; then
+    # Get active prod servers from inventory
+    SERVERS=$(grep -A 100 "prod_servers:" ansible/inventory.yml | grep -E "^\\s+prod[0-9]+:" | sed 's/://g' | awk '{print $1}')
+    for srv in $SERVERS; do
+      echo "📦 Running db-prepare on $srv..."
+      bash scripts/deploy-db-prepare.sh --server="$srv"
+    done
+  else
+    bash scripts/deploy-db-prepare.sh --server="$TARGET"
+  fi
+else
+  # Preview: single server
+  bash scripts/deploy-db-prepare.sh
+fi
+"""
+
+
+
+# ==================== 服务器管理 (server-) ====================
+#
+# 任务分类原则：
+#
+# 【第一类】严格分支绑定 (Strict Branch Binding)
+# - 规则：在 main 分支只能操作 Prod，在其他分支只能操作 Preview
+# - 包括：deploy-*, server-update, sync-config, server-configure-aws, backup, clean-docker
+# - 原因：这些操作会修改配置文件或同步代码，必须确保环境隔离
+#
+# 【第二类】显式指定目标 (Explicit Targeting)
+# - 规则：必须在任务名中明确指定 -prod/-preview 后缀
+# - 包括：server-init-*, server-resize-volume-*, ssh-*
+# - 原因：初始化/危险操作太重要，resize 频率极低，必须手动确认目标
+#
+# ====================
+
+# SSH 连接 (显式指定目标 - 只读操作)
+
+[tasks.ssh]
+description = "SSH to prod server and cd to /srv/studio"
+run = 'ssh -t deploy@1.2.3.4 "cd /srv/studio && exec bash -l"'
+alias = "ssh-prod"
+
+[tasks.ssh-preview]
+description = "SSH to preview server and cd to /srv/studio"
+run = 'ssh -t deploy@1.2.3.5 "cd /srv/studio && exec bash -l"'
+
+# 用脚本创建初始用户
+[tasks.server-init-user]
+description = "Create deploy user on server(s)"
+usage = '''
+arg "<ip>" var=#true
+flag "-u --user <user>" help="admin user" default="root" env="ADMIN_USER"
+'''
+run = '''
+for ip in ${usage_ip?}; do
+  rsync -chazP ./scripts/create-init-user.sh ${usage_user?}@$ip:
+  ssh ${usage_user?}@$ip 'bash create-init-user.sh'
+done
+'''
+
+
+# 服务器初始化 (显式指定目标 - 极度危险，必须手动确认)
+# 规则: 初始化操作太危险且频率极低，必须显式指定目标，不自动检测
+[tasks.server-init]
+description = "Initialize server(s) - specify target or defaults to all (e.g. mr server-init prod2)"
+usage = '''
+arg "[target]" help="Server target: prod1, prod2, preview, prod_servers, or all" default="all"
+flag "--become" help="Use sudo for privilege escalation (for CI)"
+flag "--no-update" help="Skip system update (apt upgrade)"
+'''
+run = """
+TARGET="${usage_target}"
+echo "🎯 Target: $TARGET"
+
+ARGS="-i ansible/inventory.yml ansible/playbooks/init-server.yml"
+
+# 默认执行系统更新，除非指定 --no-update
+if [ "${usage_no_update}" != "true" ]; then
+  ARGS="$ARGS -e force_system_update=true"
+fi
+
+# CI 环境需要 --become
+if [ "${usage_become}" = "true" ]; then
+  ARGS="$ARGS --become"
+fi
+
+if [ "$TARGET" != "all" ]; then
+  ARGS="$ARGS -l $TARGET"
+fi
+
+ansible-playbook $ARGS
+"""
+
+# 服务器配置更新 (严格分支绑定，跳过系统更新)
+[tasks.server-update]
+description = "Update server configuration without system update (auto-detect target)"
+run = "bash scripts/server-operation.sh update init-server.yml"
+
+# 系统包更新 (单独执行，耗时较长)
+[tasks.server-apt-upgrade]
+description = "Run apt upgrade on server (slow, auto-detect target)"
+run = "bash scripts/server-operation.sh apt-upgrade init-server.yml force_system_update=true"
+
+# 同步服务器配置 (严格分支绑定)
+[tasks.sync-config]
+description = "Sync server-mise.toml and bash_aliases (auto-detect target: main→prod, other→preview)"
+run = "bash scripts/server-operation.sh sync-config sync-server-config.yml"
+
+# 配置 AWS 凭证 (严格分支绑定)
+[tasks.server-configure-aws]
+description = "Configure AWS credentials for ECR access (auto-detect target: main→prod, other→preview)"
+run = "bash scripts/server-operation.sh configure-aws configure-aws-credentials.yml"
+
+# 备份与恢复（通过 Ansible 触发）
+[tasks.server-backup]
+description = "Run backup on prod servers (default: all, or specify prod1/prod2)"
+usage = 'arg "[server]" help="Target server: all (default), prod1, prod2" default="all"'
+run = "bash scripts/server-operation.sh backup run-backup.yml ${usage_server}"
+alias = "backup"
+
+# Volume 管理 (显式指定目标 - 危险操作)
+[tasks.server-resize-volume-prod]
+description = "Resize Hetzner volume on prod server (expand filesystem)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l prod"
+
+[tasks.server-resize-volume-preview]
+description = "Resize Hetzner volume on preview server (expand filesystem)"
+run = "ansible-playbook -i ansible/inventory.yml ansible/playbooks/resize.yml -l preview"
+
+# Docker 数据清理（系统重建前备份）
+[tasks.server-clean-docker]
+description = "Clean Docker data (auto-detect environment, move to .old backup before rebuild)"
+run = "bash scripts/server-operation.sh clean-docker clean-docker.yml"
+
+# Note: 其他服务器运维任务（查看日志、恢复数据库、查看备份等）
+# 请 SSH 到服务器后使用 server-mise.toml 中定义的任务
+# 例如：mise ssh-studio 然后 mise run db-restore-local
+
+# ==================== 通用工具 (无前缀) ====================
+
+[tasks.lint]
+description = "Lint all projects"
+run = 'pnpm --filter "./js-apps/*" lint'
+
+[tasks.format]
+description = "Format code with Prettier"
+run = 'prettier --write "**/*.{ts,tsx,md}"'
+
+[tasks.test]
+description = "Run tests"
+run = 'pnpm --filter "./js-apps/*" test'
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = 'pnpm --filter "./js-apps/*" clean'
+
+[tasks.install]
+description = "Install dependencies"
+run = 'pnpm --filter "./js-apps/*" install'
+
+[tasks.build]
+description = "Build all projects"
+run = 'pnpm --filter "./js-apps/*" build'
+
+[tasks.serve]
+description = "Serve built applications"
+run = 'pnpm --filter "./js-apps/*" start'
+
+# ==================== 辅助工具 ====================
+
+[tasks.build-db-prepare]
+description = "Build db-prepare (prepare migrations)"
+run = "bash infra-apps/db-prepare/build.sh"
+
+[tasks.build-psenv]
+description = "Build psenv Rust tool"
+run = 'cargo build --release'
+dir = "rust-packages/psenv"
+
+[tasks.release-psenv]
+description = "Publish psenv to crates.io"
+run = 'cargo publish'
+dir = "rust-packages/psenv"
+
+# ==================== AWS ECR 管理 ====================
+
+[tasks.ecr-setup-lifecycle]
+description = "Setup lifecycle policies for all ECR repositories"
+run = "bash scripts/setup-ecr-lifecycle.sh"
+alias = "ecr-lifecycle"
+
+# ==================== 动态任务 ====================
+
+[tasks.addjs]
+description = "Add package to a specific JS project"
+usage = '''
+arg "<project>"
+arg "[packages]" var=#true
+'''
+run = 'pnpm --filter "./js-apps/${usage_project?}" add ${usage_packages?}'
+
+[tasks.buildjs]
+description = "Run custom build command for a JS project"
+usage = '''
+arg "<project>"
+arg "[args]" var=#true
+'''
+run = 'pnpm --filter "./js-apps/${usage_project?}" ${usage_args?}'
+
+# ==================== 预览环境管理 ====================
+
+[tasks.preview-list]
+description = "List all preview environments (by branch)"
+alias = "previews"
+run = "bash scripts/preview-list.sh"
+
+[tasks.preview-delete]
+description = "Delete a preview environment by branch name"
+run = "bash scripts/preview-delete.sh ${usage_branch:-} ${usage_yes:+--yes}"
+usage = '''
+arg "<branch>" help="Branch name to delete (e.g., feat-test)"
+flag "-y --yes" help="Skip confirmation"
+'''
+
+[tasks.preview-delete-all]
+description = "Delete ALL preview environments"
+run = "bash scripts/preview-delete-all.sh ${usage_yes:+--yes}"
+usage = '''
+flag "-y --yes" help="Skip confirmation"
+'''

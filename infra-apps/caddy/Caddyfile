@@ -1,0 +1,50 @@
+# 全局日志配置
+{
+    # 控制台日志（人类可读）
+    log {
+        output stdout
+        format console
+        level INFO
+    }
+}
+
+
+(local_tls) {
+    tls /certs/_wildcard.studio.localhost.pem /certs/_wildcard.studio.localhost-key.pem
+}
+
+# Admin - Vite 开发服务器
+admin.studio.localhost {
+    import local_tls
+    reverse_proxy host.docker.internal:9001
+}
+
+# API - Node.js 服务
+api.studio.localhost {
+    import local_tls
+    reverse_proxy host.docker.internal:8003
+}
+
+# Blog - Remix 开发服务器
+blog.studio.localhost {
+    import local_tls
+    reverse_proxy host.docker.internal:9002  # 另一个端口
+}
+
+# Storefront - Next.js 开发服务器
+storefront.studio.localhost {
+    import local_tls
+    reverse_proxy host.docker.internal:9003
+}
+hono.studio.localhost {
+    import local_tls
+    reverse_proxy host.docker.internal:8001
+}
+proxy.studio.localhost {
+    import local_tls
+    reverse_proxy host.docker.internal:8002
+}
+hono-prod2-demo.studio.localhost {
+    import local_tls
+    reverse_proxy host.docker.internal:8004
+}

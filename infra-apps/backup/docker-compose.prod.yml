@@ -1,0 +1,44 @@
+services:
+  backup:
+    image: ${IMAGE_TAG}
+    restart: unless-stopped
+    env_file:
+      - .env  # 从 .env 加载敏感信息：POSTGRES_ADMIN_URL, REDIS_DOCKER_URL, S3 凭证等
+    environment:
+      ENVIRONMENT: prod
+      # 非敏感配置，直接在这里设置
+      S3_REGION: us-east-005
+      BACKUP_RETENTION_LOCAL: 7     # 生产环境保留更久
+      BACKUP_RETENTION_S3: 90       # S3 保留90天
+
+      # Cron 调度
+      POSTGRES_SCHEDULE: "0 2 * * *"    # 每天凌晨2点
+      REDIS_SCHEDULE: "0 3 * * *"       # 每天凌晨3点
+      CLEANUP_SCHEDULE: "0 5 * * *"     # 每天凌晨5点
+      FULL_BACKUP_SCHEDULE: "0 4 * * 0" # 每周日凌晨4点
+
+      TZ: UTC
+
+    volumes:
+      # 生产环境使用 /data/backups/
+      - /data/backups:/backups
+
+    networks:
+      - shared
+
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /var/log/backup.log || exit 1"]
+      interval: 1h
+      timeout: 30s
+      retries: 3
+      start_period: 1m
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"  # 生产环境日志更大
+        max-file: "5"
+
+networks:
+  shared:
+    external: true
